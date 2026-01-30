@@ -1,3 +1,5 @@
+**Language:** English | [繁體中文](docs/zh-TW/README.md)
+
 # Everything Claude Code
 
 [![Stars](https://img.shields.io/github/stars/affaan-m/everything-claude-code?style=flat)](https://github.com/affaan-m/everything-claude-code/stargazers)
@@ -6,6 +8,11 @@
 ![TypeScript](https://img.shields.io/badge/-TypeScript-3178C6?logo=typescript&logoColor=white)
 ![Go](https://img.shields.io/badge/-Go-00ADD8?logo=go&logoColor=white)
 ![Markdown](https://img.shields.io/badge/-Markdown-000000?logo=markdown&logoColor=white)
+
+<p align="left">
+  <span>English</span> |
+  <a href="README.zh-CN.md">简体中文</a>
+</p>
 
 **The complete collection of Claude Code configs from an Anthropic hackathon winner.**
 
@@ -234,6 +241,33 @@ The instinct-based learning system automatically learns your patterns:
 ```
 
 See `skills/continuous-learning-v2/` for full documentation.
+
+---
+
+## Requirements
+
+### Claude Code CLI Version
+
+**Minimum version: v2.1.0 or later**
+
+This plugin requires Claude Code CLI v2.1.0+ due to changes in how the plugin system handles hooks.
+
+Check your version:
+```bash
+claude --version
+```
+
+### Important: Hooks Auto-Loading Behavior
+
+> ⚠️ **For Contributors:** Do NOT add a `"hooks"` field to `.claude-plugin/plugin.json`. This is enforced by a regression test.
+
+Claude Code v2.1+ **automatically loads** `hooks/hooks.json` from any installed plugin by convention. Explicitly declaring it in `plugin.json` causes a duplicate detection error:
+
+```
+Duplicate hooks file detected: ./hooks/hooks.json resolves to already-loaded file
+```
+
+**History:** This has caused repeated fix/revert cycles in this repo ([#29](https://github.com/affaan-m/everything-claude-code/issues/29), [#52](https://github.com/affaan-m/everything-claude-code/issues/52), [#103](https://github.com/affaan-m/everything-claude-code/issues/103)). The behavior changed between Claude Code versions, leading to confusion. We now have a regression test to prevent this from being reintroduced.
 
 ---
 

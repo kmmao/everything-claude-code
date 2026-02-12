@@ -171,6 +171,7 @@ everything-claude-code/
 |   |-- verification-loop/          # 持续验证（详细指南）
 |   |-- golang-patterns/            # Go 惯用语和最佳实践（新增）
 |   |-- golang-testing/             # Go 测试模式、TDD、基准测试（新增）
+|   |-- cpp-testing/                # C++ 测试模式、GoogleTest、CMake/CTest（新增）
 |
 |-- commands/         # 用于快速执行的斜杠命令
 |   |-- tdd.md              # /tdd - 测试驱动开发
@@ -511,6 +512,7 @@ node tests/hooks/hooks.test.js
 - **详细指南（高级）：** [The Longform Guide to Everything Claude Code](https://x.com/affaanmustafa/status/2014040193557471352)
 - **关注：** [@affaanmustafa](https://x.com/affaanmustafa)
 - **zenith.chat:** [zenith.chat](https://zenith.chat)
+- **技能目录：** [awesome-agent-skills](https://github.com/JackyST0/awesome-agent-skills)
 
 ---
 

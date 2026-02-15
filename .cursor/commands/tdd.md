@@ -313,12 +313,14 @@ Never skip the RED phase. Never write code before tests.
 
 - Use `/plan` first to understand what to build
 - Use `/tdd` to implement with tests
-- Use `/build-and-fix` if build errors occur
+- Use `/build-fix` if build errors occur
 - Use `/code-review` to review implementation
 - Use `/test-coverage` to verify coverage
 
 ## Related Agents
 
-This command invokes the `tdd-guide` agent.
+This command invokes the `tdd-guide` agent located at:
+`~/.claude/agents/tdd-guide.md`
 
-And can reference the `tdd-workflow` skill.
+And can reference the `tdd-workflow` skill at:
+`~/.claude/skills/tdd-workflow/`

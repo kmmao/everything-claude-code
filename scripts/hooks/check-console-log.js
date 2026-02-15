@@ -14,7 +14,7 @@
  */
 
 const fs = require('fs');
-const { isGitRepo, getGitModifiedFiles, log } = require('../lib/utils');
+const { isGitRepo, getGitModifiedFiles, readFile, log } = require('../lib/utils');
 
 // Files where console.log is expected and should not trigger warnings
 const EXCLUDED_PATTERNS = [
@@ -26,16 +26,20 @@ const EXCLUDED_PATTERNS = [
   /__mocks__\//,
 ];
 
+const MAX_STDIN = 1024 * 1024; // 1MB limit
 let data = '';
+process.stdin.setEncoding('utf8');
 
 process.stdin.on('data', chunk => {
-  data += chunk;
+  if (data.length < MAX_STDIN) {
+    data += chunk;
+  }
 });
 
 process.stdin.on('end', () => {
   try {
     if (!isGitRepo()) {
-      console.log(data);
+      process.stdout.write(data);
       process.exit(0);
     }
 
@@ -46,8 +50,8 @@ process.stdin.on('end', () => {
     let hasConsole = false;
 
     for (const file of files) {
-      const content = fs.readFileSync(file, 'utf8');
-      if (content.includes('console.log')) {
+      const content = readFile(file);
+      if (content && content.includes('console.log')) {
         log(`[Hook] WARNING: console.log found in ${file}`);
         hasConsole = true;
       }
@@ -56,10 +60,11 @@ process.stdin.on('end', () => {
     if (hasConsole) {
       log('[Hook] Remove console.log statements before committing');
     }
-  } catch {
-    // Silently ignore errors (git might not be available, etc.)
+  } catch (err) {
+    log(`[Hook] check-console-log error: ${err.message}`);
   }
 
   // Always output the original data
-  console.log(data);
+  process.stdout.write(data);
+  process.exit(0);
 });

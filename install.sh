@@ -22,7 +22,15 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Resolve symlinks — needed when invoked as `ecc-install` via npm/bun bin symlink
+SCRIPT_PATH="$0"
+while [ -L "$SCRIPT_PATH" ]; do
+    link_dir="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    # Resolve relative symlinks
+    [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$link_dir/$SCRIPT_PATH"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 RULES_DIR="$SCRIPT_DIR/rules"
 
 # --- Parse --target flag ---
@@ -62,6 +70,12 @@ fi
 if [[ "$TARGET" == "claude" ]]; then
     DEST_DIR="${CLAUDE_RULES_DIR:-$HOME/.claude/rules}"
 
+    # Warn if destination already exists (user may have local customizations)
+    if [[ -d "$DEST_DIR" ]] && [[ "$(ls -A "$DEST_DIR" 2>/dev/null)" ]]; then
+        echo "Note: $DEST_DIR/ already exists. Existing files will be overwritten."
+        echo "      Back up any local customizations before proceeding."
+    fi
+
     # Always install common rules
     echo "Installing common rules -> $DEST_DIR/common/"
     mkdir -p "$DEST_DIR/common"
@@ -69,6 +83,11 @@ if [[ "$TARGET" == "claude" ]]; then
 
     # Install each requested language
     for lang in "$@"; do
+        # Validate language name to prevent path traversal
+        if [[ ! "$lang" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "Error: invalid language name '$lang'. Only alphanumeric, dash, and underscore allowed." >&2
+            continue
+        fi
         lang_dir="$RULES_DIR/$lang"
         if [[ ! -d "$lang_dir" ]]; then
             echo "Warning: rules/$lang/ does not exist, skipping." >&2
@@ -101,6 +120,11 @@ if [[ "$TARGET" == "cursor" ]]; then
 
     # Install language-specific rules
     for lang in "$@"; do
+        # Validate language name to prevent path traversal
+        if [[ ! "$lang" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "Error: invalid language name '$lang'. Only alphanumeric, dash, and underscore allowed." >&2
+            continue
+        fi
         if [[ -d "$CURSOR_SRC/rules" ]]; then
             found=false
             for f in "$CURSOR_SRC/rules"/${lang}-*.md; do

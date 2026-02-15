@@ -5,7 +5,7 @@
  * Cross-platform (Windows, macOS, Linux)
  *
  * Runs when Claude session ends. Extracts a meaningful summary from
- * the session transcript (via CLAUDE_TRANSCRIPT_PATH) and saves it
+ * the session transcript (via stdin JSON transcript_path) and saves it
  * to a session file for cross-session continuity.
  */
 
@@ -45,18 +45,20 @@ function extractSessionSummary(transcriptPath) {
       const entry = JSON.parse(line);
 
       // Collect user messages (first 200 chars each)
-      if (entry.type === 'user' || entry.role === 'user') {
-        const text = typeof entry.content === 'string'
-          ? entry.content
-          : Array.isArray(entry.content)
-            ? entry.content.map(c => c.text || '').join(' ')
+      if (entry.type === 'user' || entry.role === 'user' || entry.message?.role === 'user') {
+        // Support both direct content and nested message.content (Claude Code JSONL format)
+        const rawContent = entry.message?.content ?? entry.content;
+        const text = typeof rawContent === 'string'
+          ? rawContent
+          : Array.isArray(rawContent)
+            ? rawContent.map(c => (c && c.text) || '').join(' ')
             : '';
         if (text.trim()) {
           userMessages.push(text.trim().slice(0, 200));
         }
       }
 
-      // Collect tool names and modified files
+      // Collect tool names and modified files (direct tool_use entries)
       if (entry.type === 'tool_use' || entry.tool_name) {
         const toolName = entry.tool_name || entry.name || '';
         if (toolName) toolsUsed.add(toolName);
@@ -64,6 +66,21 @@ function extractSessionSummary(transcriptPath) {
         const filePath = entry.tool_input?.file_path || entry.input?.file_path || '';
         if (filePath && (toolName === 'Edit' || toolName === 'Write')) {
           filesModified.add(filePath);
+        }
+      }
+
+      // Extract tool uses from assistant message content blocks (Claude Code JSONL format)
+      if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
+        for (const block of entry.message.content) {
+          if (block.type === 'tool_use') {
+            const toolName = block.name || '';
+            if (toolName) toolsUsed.add(toolName);
+
+            const filePath = block.input?.file_path || '';
+            if (filePath && (toolName === 'Edit' || toolName === 'Write')) {
+              filesModified.add(filePath);
+            }
+          }
         }
       }
     } catch {
@@ -85,7 +102,39 @@ function extractSessionSummary(transcriptPath) {
   };
 }
 
+// Read hook input from stdin (Claude Code provides transcript_path via stdin JSON)
+const MAX_STDIN = 1024 * 1024;
+let stdinData = '';
+process.stdin.setEncoding('utf8');
+
+process.stdin.on('data', chunk => {
+  if (stdinData.length < MAX_STDIN) {
+    stdinData += chunk;
+  }
+});
+
+process.stdin.on('end', () => {
+  runMain();
+});
+
+function runMain() {
+  main().catch(err => {
+    console.error('[SessionEnd] Error:', err.message);
+    process.exit(0);
+  });
+}
+
 async function main() {
+  // Parse stdin JSON to get transcript_path
+  let transcriptPath = null;
+  try {
+    const input = JSON.parse(stdinData);
+    transcriptPath = input.transcript_path;
+  } catch {
+    // Fallback: try env var for backwards compatibility
+    transcriptPath = process.env.CLAUDE_TRANSCRIPT_PATH;
+  }
+
   const sessionsDir = getSessionsDir();
   const today = getDateString();
   const shortId = getSessionIdShort();
@@ -96,27 +145,34 @@ async function main() {
   const currentTime = getTimeString();
 
   // Try to extract summary from transcript
-  const transcriptPath = process.env.CLAUDE_TRANSCRIPT_PATH;
   let summary = null;
 
-  if (transcriptPath && fs.existsSync(transcriptPath)) {
-    summary = extractSessionSummary(transcriptPath);
+  if (transcriptPath) {
+    if (fs.existsSync(transcriptPath)) {
+      summary = extractSessionSummary(transcriptPath);
+    } else {
+      log(`[SessionEnd] Transcript not found: ${transcriptPath}`);
+    }
   }
 
   if (fs.existsSync(sessionFile)) {
     // Update existing session file
-    replaceInFile(
+    const updated = replaceInFile(
       sessionFile,
       /\*\*Last Updated:\*\*.*/,
       `**Last Updated:** ${currentTime}`
     );
+    if (!updated) {
+      log(`[SessionEnd] Failed to update timestamp in ${sessionFile}`);
+    }
 
     // If we have a new summary and the file still has the blank template, replace it
     if (summary) {
       const existing = readFile(sessionFile);
       if (existing && existing.includes('[Session context goes here]')) {
+        // Use a flexible regex that tolerates CRLF, extra whitespace, and minor template variations
         const updatedContent = existing.replace(
-          /## Current State\n\n\[Session context goes here\]\n\n### Completed\n- \[ \]\n\n### In Progress\n- \[ \]\n\n### Notes for Next Session\n-\n\n### Context to Load\n```\n\[relevant files\]\n```/,
+          /## Current State\s*\n\s*\[Session context goes here\][\s\S]*?### Context to Load\s*\n```\s*\n\[relevant files\]\s*\n```/,
           buildSummarySection(summary)
         );
         writeFile(sessionFile, updatedContent);
@@ -150,10 +206,10 @@ ${summarySection}
 function buildSummarySection(summary) {
   let section = '## Session Summary\n\n';
 
-  // Tasks (from user messages)
+  // Tasks (from user messages — collapse newlines and escape backticks to prevent markdown breaks)
   section += '### Tasks\n';
   for (const msg of summary.userMessages) {
-    section += `- ${msg}\n`;
+    section += `- ${msg.replace(/\n/g, ' ').replace(/`/g, '\\`')}\n`;
   }
   section += '\n';
 
@@ -176,7 +232,3 @@ function buildSummarySection(summary) {
   return section;
 }
 
-main().catch(err => {
-  console.error('[SessionEnd] Error:', err.message);
-  process.exit(0);
-});

@@ -13,7 +13,7 @@
 
 **🌐 Language / 语言 / 語言**
 
-[**English**](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](docs/zh-TW/README.md)
+[**English**](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](docs/zh-TW/README.md) | [日本語](docs/ja-JP/README.md)
 
 </div>
 
@@ -95,7 +95,7 @@ cp -r everything-claude-code/rules/* ~/.claude/rules/
 /plugin list everything-claude-code@everything-claude-code
 ```
 
-✨ **完成！** 你现在可以使用 15+ 代理、30+ 技能和 20+ 命令。
+✨ **完成！** 你现在可以使用 13 个代理、37 个技能和 31 个命令。
 
 ---
 

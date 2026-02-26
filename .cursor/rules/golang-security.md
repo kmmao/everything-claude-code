@@ -1,12 +1,11 @@
 ---
-description: "Go security: environment variable secrets, gosec static analysis, context timeouts"
-globs: ["**/*.go"]
+description: "Go security extending common rules"
+globs: ["**/*.go", "**/go.mod", "**/go.sum"]
 alwaysApply: false
 ---
-
 # Go Security
 
-> This file extends [common/security.md](../common/security.md) with Go specific content.
+> This file extends the common security rule with Go specific content.
 
 ## Secret Management
 

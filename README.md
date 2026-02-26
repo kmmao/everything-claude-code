@@ -69,6 +69,15 @@ This repo is the raw code only. The guides explain everything.
 
 ## What's New
 
+### v1.6.0 — Codex CLI, AgentShield & Marketplace (Feb 2026)
+
+- **Codex CLI support** — New `/codex-setup` command generates `codex.md` for OpenAI Codex CLI compatibility
+- **7 new skills** — `search-first`, `swift-actor-persistence`, `swift-protocol-di-testing`, `regex-vs-llm-structured-text`, `content-hash-cache-pattern`, `cost-aware-llm-pipeline`, `skill-stocktake`
+- **AgentShield integration** — `/security-scan` skill runs AgentShield directly from Claude Code; 1282 tests, 102 rules
+- **GitHub Marketplace** — ECC Tools GitHub App live at [github.com/marketplace/ecc-tools](https://github.com/marketplace/ecc-tools) with free/pro/enterprise tiers
+- **30+ community PRs merged** — Contributions from 30 contributors across 6 languages
+- **978 internal tests** — Expanded validation suite across agents, skills, commands, hooks, and rules
+
 ### v1.4.1 — Bug Fix (Feb 2026)
 
 - **Fixed instinct import content loss** — `parse_instinct_file()` was silently dropping all content after frontmatter (Action, Evidence, Examples sections) during `/instinct-import`. Fixed by community contributor @ericcai0814 ([#148](https://github.com/affaan-m/everything-claude-code/issues/148), [#161](https://github.com/affaan-m/everything-claude-code/pull/161))
@@ -143,7 +152,7 @@ For manual install instructions see the README in the `rules/` folder.
 /plugin list everything-claude-code@everything-claude-code
 ```
 
-✨ **That's it!** You now have access to 13 agents, 44 skills, and 32 commands.
+✨ **That's it!** You now have access to 13 agents, 48 skills, and 32 commands.
 
 ---
 
@@ -252,6 +261,10 @@ everything-claude-code/
 |   |-- swift-actor-persistence/     # Thread-safe Swift data persistence with actors (NEW)
 |   |-- swift-protocol-di-testing/   # Protocol-based DI for testable Swift code (NEW)
 |   |-- search-first/               # Research-before-coding workflow (NEW)
+|   |-- skill-stocktake/            # Audit skills and commands for quality (NEW)
+|   |-- liquid-glass-design/         # iOS 26 Liquid Glass design system (NEW)
+|   |-- foundation-models-on-device/ # Apple on-device LLM with FoundationModels (NEW)
+|   |-- swift-concurrency-6-2/       # Swift 6.2 Approachable Concurrency (NEW)
 |
 |-- commands/         # Slash commands for quick execution
 |   |-- tdd.md              # /tdd - Test-driven development
@@ -383,7 +396,7 @@ Both options create:
 
 ### AgentShield — Security Auditor
 
-> Built at the Claude Code Hackathon (Cerebral Valley x Anthropic, Feb 2026). 912 tests, 98% coverage, 102 static analysis rules.
+> Built at the Claude Code Hackathon (Cerebral Valley x Anthropic, Feb 2026). 1282 tests, 98% coverage, 102 static analysis rules.
 
 Scan your Claude Code configuration for vulnerabilities, misconfigurations, and injection risks.
 
@@ -761,31 +774,102 @@ Please contribute! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Cursor IDE Support
 
-ecc-universal includes pre-translated configurations for [Cursor IDE](https://cursor.com). The `.cursor/` directory contains rules, agents, skills, commands, and MCP configs adapted for Cursor's format.
+ECC provides **full Cursor IDE support** with hooks, rules, agents, skills, commands, and MCP configs adapted for Cursor's native format.
 
 ### Quick Start (Cursor)
 
 ```bash
-# Install the package
-npm install ecc-universal
-
 # Install for your language(s)
 ./install.sh --target cursor typescript
-./install.sh --target cursor python golang
+./install.sh --target cursor python golang swift
 ```
 
-### What's Translated
+### What's Included
 
-| Component | Claude Code → Cursor | Parity |
-|-----------|---------------------|--------|
-| Rules | YAML frontmatter added, paths flattened | Full |
-| Agents | Model IDs expanded, tools → readonly flag | Full |
-| Skills | No changes needed (identical standard) | Identical |
-| Commands | Path references updated, multi-* stubbed | Partial |
-| MCP Config | Env interpolation syntax updated | Full |
-| Hooks | No equivalent in Cursor | See alternatives |
+| Component | Count | Details |
+|-----------|-------|---------|
+| Hook Events | 15 | sessionStart, beforeShellExecution, afterFileEdit, beforeMCPExecution, beforeSubmitPrompt, and 10 more |
+| Hook Scripts | 16 | Thin Node.js scripts delegating to `scripts/hooks/` via shared adapter |
+| Rules | 29 | 9 common (alwaysApply) + 20 language-specific (TypeScript, Python, Go, Swift) |
+| Agents | Shared | Via AGENTS.md at root (read by Cursor natively) |
+| Skills | Shared | Via AGENTS.md at root |
+| Commands | Shared | `.cursor/commands/` if installed |
+| MCP Config | Shared | `.cursor/mcp.json` if installed |
 
-See [.cursor/README.md](.cursor/README.md) for details and [.cursor/MIGRATION.md](.cursor/MIGRATION.md) for the full migration guide.
+### Hook Architecture (DRY Adapter Pattern)
+
+Cursor has **more hook events than Claude Code** (20 vs 8). The `.cursor/hooks/adapter.js` module transforms Cursor's stdin JSON to Claude Code's format, allowing existing `scripts/hooks/*.js` to be reused without duplication.
+
+```
+Cursor stdin JSON → adapter.js → transforms → scripts/hooks/*.js
+                                              (shared with Claude Code)
+```
+
+Key hooks:
+- **beforeShellExecution** — Blocks dev servers outside tmux (exit 2), git push review
+- **afterFileEdit** — Auto-format + TypeScript check + console.log warning
+- **beforeSubmitPrompt** — Detects secrets (sk-, ghp_, AKIA patterns) in prompts
+- **beforeTabFileRead** — Blocks Tab from reading .env, .key, .pem files (exit 2)
+- **beforeMCPExecution / afterMCPExecution** — MCP audit logging
+
+### Rules Format
+
+Cursor rules use YAML frontmatter with `description`, `globs`, and `alwaysApply`:
+
+```yaml
+---
+description: "TypeScript coding style extending common rules"
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: false
+---
+```
+
+---
+
+## Codex CLI Support
+
+ECC provides **first-class Codex CLI support** with a reference configuration, Codex-specific AGENTS.md supplement, and 10 ported skills.
+
+### Quick Start (Codex)
+
+```bash
+# Copy the reference config to your home directory
+cp .codex/config.toml ~/.codex/config.toml
+
+# Run Codex in the repo — AGENTS.md is auto-detected
+codex
+```
+
+### What's Included
+
+| Component | Count | Details |
+|-----------|-------|---------|
+| Config | 1 | `.codex/config.toml` — model, permissions, MCP servers, persistent instructions |
+| AGENTS.md | 2 | Root (universal) + `.codex/AGENTS.md` (Codex-specific supplement) |
+| Skills | 10 | `.agents/skills/` — SKILL.md + agents/openai.yaml per skill |
+| MCP Servers | 4 | GitHub, Context7, Memory, Sequential Thinking (command-based) |
+| Profiles | 2 | `strict` (read-only sandbox) and `yolo` (full auto-approve) |
+
+### Skills
+
+Skills at `.agents/skills/` are auto-loaded by Codex:
+
+| Skill | Description |
+|-------|-------------|
+| tdd-workflow | Test-driven development with 80%+ coverage |
+| security-review | Comprehensive security checklist |
+| coding-standards | Universal coding standards |
+| frontend-patterns | React/Next.js patterns |
+| backend-patterns | API design, database, caching |
+| e2e-testing | Playwright E2E tests |
+| eval-harness | Eval-driven development |
+| strategic-compact | Context management |
+| api-design | REST API design patterns |
+| verification-loop | Build, test, lint, typecheck, security |
+
+### Key Limitation
+
+Codex CLI does **not yet support hooks** ([GitHub Issue #2109](https://github.com/openai/codex/issues/2109), 430+ upvotes). Security enforcement is instruction-based via `persistent_instructions` in config.toml and the sandbox permission system.
 
 ---
 
@@ -810,12 +894,12 @@ The configuration is automatically detected from `.opencode/opencode.json`.
 | Feature | Claude Code | OpenCode | Status |
 |---------|-------------|----------|--------|
 | Agents | ✅ 13 agents | ✅ 12 agents | **Claude Code leads** |
-| Commands | ✅ 32 commands | ✅ 24 commands | **Claude Code leads** |
-| Skills | ✅ 44 skills | ✅ 16 skills | **Claude Code leads** |
-| Hooks | ✅ 3 phases | ✅ 20+ events | **OpenCode has more!** |
-| Rules | ✅ 8 rules | ✅ 8 rules | **Full parity** |
-| MCP Servers | ✅ Full | ✅ Full | **Full parity** |
-| Custom Tools | ✅ Via hooks | ✅ Native support | **OpenCode is better** |
+| Commands | ✅ 33 commands | ✅ 24 commands | **Claude Code leads** |
+| Skills | ✅ 50+ skills | ✅ 37 skills | **Claude Code leads** |
+| Hooks | ✅ 8 event types | ✅ 11 events | **OpenCode has more!** |
+| Rules | ✅ 29 rules | ✅ 13 instructions | **Claude Code leads** |
+| MCP Servers | ✅ 14 servers | ✅ Full | **Full parity** |
+| Custom Tools | ✅ Via hooks | ✅ 6 native tools | **OpenCode is better** |
 
 ### Hook Support via Plugins
 
@@ -894,6 +978,34 @@ Then add to your `opencode.json`:
 - **OpenCode Plugin README**: `.opencode/README.md`
 - **Consolidated Rules**: `.opencode/instructions/INSTRUCTIONS.md`
 - **LLM Documentation**: `llms.txt` (complete OpenCode docs for LLMs)
+
+---
+
+## Cross-Tool Feature Parity
+
+ECC is the **first plugin to maximize every major AI coding tool**. Here's how each harness compares:
+
+| Feature | Claude Code | Cursor IDE | Codex CLI | OpenCode |
+|---------|------------|------------|-----------|----------|
+| **Agents** | 13 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
+| **Commands** | 33 | Shared | Instruction-based | 24 |
+| **Skills** | 50+ | Shared | 10 (native format) | 37 |
+| **Hook Events** | 8 types | 15 types | None yet | 11 types |
+| **Hook Scripts** | 9 scripts | 16 scripts (DRY adapter) | N/A | Plugin hooks |
+| **Rules** | 29 (common + lang) | 29 (YAML frontmatter) | Instruction-based | 13 instructions |
+| **Custom Tools** | Via hooks | Via hooks | N/A | 6 native tools |
+| **MCP Servers** | 14 | Shared (mcp.json) | 4 (command-based) | Full |
+| **Config Format** | settings.json | hooks.json + rules/ | config.toml | opencode.json |
+| **Context File** | CLAUDE.md + AGENTS.md | AGENTS.md | AGENTS.md | AGENTS.md |
+| **Secret Detection** | Hook-based | beforeSubmitPrompt hook | Sandbox-based | Hook-based |
+| **Auto-Format** | PostToolUse hook | afterFileEdit hook | N/A | file.edited hook |
+| **Version** | Plugin | Plugin | Reference config | 1.6.0 |
+
+**Key architectural decisions:**
+- **AGENTS.md** at root is the universal cross-tool file (read by all 4 tools)
+- **DRY adapter pattern** lets Cursor reuse Claude Code's hook scripts without duplication
+- **Skills format** (SKILL.md with YAML frontmatter) works across Claude Code, Codex, and OpenCode
+- Codex's lack of hooks is compensated by `persistent_instructions` and sandbox permissions
 
 ---
 
@@ -1023,7 +1135,7 @@ This project is free and open source. Sponsors help keep it maintained and growi
 - **Longform Guide (Advanced):** [The Longform Guide to Everything Claude Code](https://x.com/affaanmustafa/status/2014040193557471352)
 - **Follow:** [@affaanmustafa](https://x.com/affaanmustafa)
 - **zenith.chat:** [zenith.chat](https://zenith.chat)
-- **Skills Directory:** [awesome-agent-skills](https://github.com/JackyST0/awesome-agent-skills)
+- **Skills Directory:** awesome-agent-skills (community-maintained directory of agent skills)
 
 ---
 

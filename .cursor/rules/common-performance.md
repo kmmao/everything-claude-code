@@ -1,8 +1,7 @@
 ---
-description: "Performance optimization: model selection strategy, context window management, extended thinking"
+description: "Performance: model selection, context management, build troubleshooting"
 alwaysApply: true
 ---
-
 # Performance Optimization
 
 ## Model Selection Strategy

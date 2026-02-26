@@ -1,12 +1,11 @@
 ---
-description: "Go hooks: gofmt/goimports auto-format, go vet, staticcheck"
-globs: ["**/*.go"]
+description: "Go hooks extending common rules"
+globs: ["**/*.go", "**/go.mod", "**/go.sum"]
 alwaysApply: false
 ---
-
 # Go Hooks
 
-> This file extends [common/hooks.md](../common/hooks.md) with Go specific content.
+> This file extends the common hooks rule with Go specific content.
 
 ## PostToolUse Hooks
 

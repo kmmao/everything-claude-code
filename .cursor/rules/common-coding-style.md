@@ -1,8 +1,7 @@
 ---
-description: "Core coding style rules: immutability, file organization, error handling, input validation"
+description: "ECC coding style: immutability, file organization, error handling, validation"
 alwaysApply: true
 ---
-
 # Coding Style
 
 ## Immutability (CRITICAL)

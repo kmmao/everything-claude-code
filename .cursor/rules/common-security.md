@@ -1,8 +1,7 @@
 ---
-description: "Mandatory security checks, secret management, and security response protocol"
+description: "Security: mandatory checks, secret management, response protocol"
 alwaysApply: true
 ---
-
 # Security Guidelines
 
 ## Mandatory Security Checks

@@ -1,12 +1,11 @@
 ---
-description: "TypeScript/JavaScript patterns: API response interface, React hooks, repository pattern"
+description: "TypeScript patterns extending common rules"
 globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
 alwaysApply: false
 ---
-
 # TypeScript/JavaScript Patterns
 
-> This file extends [common/patterns.md](../common/patterns.md) with TypeScript/JavaScript specific content.
+> This file extends the common patterns rule with TypeScript/JavaScript specific content.
 
 ## API Response Format
 

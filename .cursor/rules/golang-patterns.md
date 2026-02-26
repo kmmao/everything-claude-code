@@ -1,12 +1,11 @@
 ---
-description: "Go patterns: functional options, small interfaces, dependency injection"
-globs: ["**/*.go"]
+description: "Go patterns extending common rules"
+globs: ["**/*.go", "**/go.mod", "**/go.sum"]
 alwaysApply: false
 ---
-
 # Go Patterns
 
-> This file extends [common/patterns.md](../common/patterns.md) with Go specific content.
+> This file extends the common patterns rule with Go specific content.
 
 ## Functional Options
 

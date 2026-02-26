@@ -1,12 +1,11 @@
 ---
-description: "TypeScript/JavaScript coding style: immutability with spread operator, Zod validation, async error handling"
+description: "TypeScript coding style extending common rules"
 globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
 alwaysApply: false
 ---
-
 # TypeScript/JavaScript Coding Style
 
-> This file extends [common/coding-style.md](../common/coding-style.md) with TypeScript/JavaScript specific content.
+> This file extends the common coding style rule with TypeScript/JavaScript specific content.
 
 ## Immutability
 

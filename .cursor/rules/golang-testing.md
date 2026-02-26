@@ -1,12 +1,11 @@
 ---
-description: "Go testing: table-driven tests, race detection, coverage reporting"
-globs: ["**/*.go"]
+description: "Go testing extending common rules"
+globs: ["**/*.go", "**/go.mod", "**/go.sum"]
 alwaysApply: false
 ---
-
 # Go Testing
 
-> This file extends [common/testing.md](../common/testing.md) with Go specific content.
+> This file extends the common testing rule with Go specific content.
 
 ## Framework
 

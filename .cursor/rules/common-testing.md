@@ -1,8 +1,7 @@
 ---
-description: "Testing requirements: 80% minimum coverage, TDD workflow, test types"
+description: "Testing requirements: 80% coverage, TDD workflow, test types"
 alwaysApply: true
 ---
-
 # Testing Requirements
 
 ## Minimum Test Coverage: 80%

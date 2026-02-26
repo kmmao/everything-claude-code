@@ -1,12 +1,11 @@
 ---
-description: "Python coding style: PEP 8, type annotations, frozen dataclasses, black/isort/ruff formatting"
-globs: ["**/*.py"]
+description: "Python coding style extending common rules"
+globs: ["**/*.py", "**/*.pyi"]
 alwaysApply: false
 ---
-
 # Python Coding Style
 
-> This file extends [common/coding-style.md](../common/coding-style.md) with Python specific content.
+> This file extends the common coding style rule with Python specific content.
 
 ## Standards
 

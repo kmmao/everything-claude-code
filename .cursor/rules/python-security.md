@@ -1,12 +1,11 @@
 ---
-description: "Python security: dotenv secret management, bandit static analysis"
-globs: ["**/*.py"]
+description: "Python security extending common rules"
+globs: ["**/*.py", "**/*.pyi"]
 alwaysApply: false
 ---
-
 # Python Security
 
-> This file extends [common/security.md](../common/security.md) with Python specific content.
+> This file extends the common security rule with Python specific content.
 
 ## Secret Management
 

@@ -1,12 +1,11 @@
 ---
-description: "Python patterns: Protocol for duck typing, dataclass DTOs, context managers, generators"
-globs: ["**/*.py"]
+description: "Python patterns extending common rules"
+globs: ["**/*.py", "**/*.pyi"]
 alwaysApply: false
 ---
-
 # Python Patterns
 
-> This file extends [common/patterns.md](../common/patterns.md) with Python specific content.
+> This file extends the common patterns rule with Python specific content.
 
 ## Protocol (Duck Typing)
 

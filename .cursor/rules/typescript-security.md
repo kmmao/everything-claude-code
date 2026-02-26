@@ -1,12 +1,11 @@
 ---
-description: "TypeScript/JavaScript security: environment variable secrets, security-reviewer agent"
+description: "TypeScript security extending common rules"
 globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
 alwaysApply: false
 ---
-
 # TypeScript/JavaScript Security
 
-> This file extends [common/security.md](../common/security.md) with TypeScript/JavaScript specific content.
+> This file extends the common security rule with TypeScript/JavaScript specific content.
 
 ## Secret Management
 

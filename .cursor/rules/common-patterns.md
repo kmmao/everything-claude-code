@@ -1,8 +1,7 @@
 ---
-description: "Common design patterns: skeleton projects, repository pattern, API response format"
+description: "Common patterns: repository, API response, skeleton projects"
 alwaysApply: true
 ---
-
 # Common Patterns
 
 ## Skeleton Projects

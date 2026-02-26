@@ -1,12 +1,11 @@
 ---
-description: "Python testing: pytest framework, coverage reporting, test categorization with markers"
-globs: ["**/*.py"]
+description: "Python testing extending common rules"
+globs: ["**/*.py", "**/*.pyi"]
 alwaysApply: false
 ---
-
 # Python Testing
 
-> This file extends [common/testing.md](../common/testing.md) with Python specific content.
+> This file extends the common testing rule with Python specific content.
 
 ## Framework
 

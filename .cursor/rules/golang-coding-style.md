@@ -1,16 +1,15 @@
 ---
-description: "Go coding style: gofmt mandatory, small interfaces, error wrapping with context"
-globs: ["**/*.go"]
+description: "Go coding style extending common rules"
+globs: ["**/*.go", "**/go.mod", "**/go.sum"]
 alwaysApply: false
 ---
-
 # Go Coding Style
 
-> This file extends [common/coding-style.md](../common/coding-style.md) with Go specific content.
+> This file extends the common coding style rule with Go specific content.
 
 ## Formatting
 
-- **gofmt** and **goimports** are mandatory — no style debates
+- **gofmt** and **goimports** are mandatory -- no style debates
 
 ## Design Principles
 

@@ -16,10 +16,13 @@ const {
   log
 } = require('./utils');
 
-// Session filename pattern: YYYY-MM-DD-[short-id]-session.tmp
-// The short-id is optional (old format) and can be 8+ alphanumeric characters
-// Matches: "2026-02-01-session.tmp" or "2026-02-01-a1b2c3d4-session.tmp"
-const SESSION_FILENAME_REGEX = /^(\d{4}-\d{2}-\d{2})(?:-([a-z0-9]{8,}))?-session\.tmp$/;
+// Session filename pattern: YYYY-MM-DD-[session-id]-session.tmp
+// The session-id is optional (old format) and can include letters, digits,
+// underscores, and hyphens, but must not start with a hyphen.
+// Matches: "2026-02-01-session.tmp", "2026-02-01-a1b2c3d4-session.tmp",
+// "2026-02-01-frontend-worktree-1-session.tmp", and
+// "2026-02-01-ChezMoi_2-session.tmp"
+const SESSION_FILENAME_REGEX = /^(\d{4}-\d{2}-\d{2})(?:-([a-zA-Z0-9_][a-zA-Z0-9_-]*))?-session\.tmp$/;
 
 /**
  * Parse session filename to extract metadata
@@ -83,6 +86,9 @@ function parseSessionMetadata(content) {
     date: null,
     started: null,
     lastUpdated: null,
+    project: null,
+    branch: null,
+    worktree: null,
     completed: [],
     inProgress: [],
     notes: '',
@@ -113,6 +119,22 @@ function parseSessionMetadata(content) {
   const updatedMatch = content.match(/\*\*Last Updated:\*\*\s*([\d:]+)/);
   if (updatedMatch) {
     metadata.lastUpdated = updatedMatch[1];
+  }
+
+  // Extract control-plane metadata
+  const projectMatch = content.match(/\*\*Project:\*\*\s*(.+)$/m);
+  if (projectMatch) {
+    metadata.project = projectMatch[1].trim();
+  }
+
+  const branchMatch = content.match(/\*\*Branch:\*\*\s*(.+)$/m);
+  if (branchMatch) {
+    metadata.branch = branchMatch[1].trim();
+  }
+
+  const worktreeMatch = content.match(/\*\*Worktree:\*\*\s*(.+)$/m);
+  if (worktreeMatch) {
+    metadata.worktree = worktreeMatch[1].trim();
   }
 
   // Extract completed items

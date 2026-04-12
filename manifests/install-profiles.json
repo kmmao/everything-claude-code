@@ -66,9 +66,15 @@
         "security",
         "research-apis",
         "business-content",
+        "operator-workflows",
         "social-distribution",
         "media-generation",
-        "orchestration"
+        "orchestration",
+        "swift-apple",
+        "agentic-patterns",
+        "devops-infra",
+        "supply-chain-domain",
+        "document-processing"
       ]
     }
   }

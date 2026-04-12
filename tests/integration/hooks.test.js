@@ -7,6 +7,7 @@
  */
 
 const assert = require('assert');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -90,6 +91,14 @@ function runHookWithInput(scriptPath, input = {}, env = {}, timeoutMs = 10000) {
   });
 }
 
+function getSessionStartPayload(stdout) {
+  assert.ok(stdout.trim(), 'Expected SessionStart hook to emit stdout payload');
+  const payload = JSON.parse(stdout);
+  assert.strictEqual(payload.hookSpecificOutput?.hookEventName, 'SessionStart');
+  assert.strictEqual(typeof payload.hookSpecificOutput?.additionalContext, 'string');
+  return payload;
+}
+
 /**
  * Run a hook command string exactly as declared in hooks.json.
  * Supports wrapped node script commands and shell wrappers.
@@ -171,6 +180,36 @@ function cleanupTestDir(testDir) {
   fs.rmSync(testDir, { recursive: true, force: true });
 }
 
+function writeInstinctFile(filePath, entries) {
+  const body = entries.map(entry => `---
+id: ${entry.id}
+trigger: "${entry.trigger}"
+confidence: ${entry.confidence}
+domain: ${entry.domain || 'general'}
+scope: ${entry.scope}
+---
+
+## Action
+${entry.action}
+
+## Evidence
+${entry.evidence || 'Learned from repeated observations.'}
+`).join('\n');
+
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, body);
+}
+
+function getHookCommandByDescription(hooks, lifecycle, descriptionText) {
+  const hookGroup = hooks.hooks[lifecycle]?.find(
+    entry => entry.description && entry.description.includes(descriptionText)
+  );
+
+  assert.ok(hookGroup, `Expected ${lifecycle} hook matching "${descriptionText}"`);
+  assert.ok(hookGroup.hooks?.[0]?.command, `Expected ${lifecycle} hook command for "${descriptionText}"`);
+  return hookGroup.hooks[0].command;
+}
+
 // Test suite
 async function runTests() {
   console.log('\n=== Hook Integration Tests ===\n');
@@ -239,11 +278,14 @@ async function runTests() {
   // ==========================================
   console.log('\nHook Output Format:');
 
-  if (await asyncTest('hooks output messages to stderr (not stdout)', async () => {
+  if (await asyncTest('session-start logs diagnostics to stderr and emits structured stdout when context exists', async () => {
     const result = await runHookWithInput(path.join(scriptsDir, 'session-start.js'), {});
     // Session-start should write info to stderr
     assert.ok(result.stderr.length > 0, 'Should have stderr output');
     assert.ok(result.stderr.includes('[SessionStart]'), 'Should have [SessionStart] prefix');
+    const payload = getSessionStartPayload(result.stdout);
+    assert.ok(payload.hookSpecificOutput, 'Should include hookSpecificOutput');
+    assert.strictEqual(payload.hookSpecificOutput.hookEventName, 'SessionStart');
   })) passed++; else failed++;
 
   if (await asyncTest('PreCompact hook logs to stderr', async () => {
@@ -253,7 +295,11 @@ async function runTests() {
 
   if (await asyncTest('dev server hook transforms command to tmux session', async () => {
     // Test the auto-tmux dev hook — transforms dev commands to run in tmux
-    const hookCommand = hooks.hooks.PreToolUse[0].hooks[0].command;
+    const hookCommand = getHookCommandByDescription(
+      hooks,
+      'PreToolUse',
+      'Auto-start dev servers in tmux'
+    );
     const result = await runHookCommand(hookCommand, {
       tool_input: { command: 'npm run dev' }
     });
@@ -278,9 +324,168 @@ async function runTests() {
     assert.strictEqual(result.code, 0, 'Non-blocking hook should exit 0');
   })) passed++; else failed++;
 
+  if (await asyncTest('session-start registers an observer lease for the active session', async () => {
+    const testDir = createTestDir();
+    const projectDir = path.join(testDir, 'project');
+    fs.mkdirSync(projectDir, { recursive: true });
+
+    try {
+      const sessionId = `session-${Date.now()}`;
+      const result = await runHookWithInput(
+        path.join(scriptsDir, 'session-start.js'),
+        {},
+        {
+          HOME: testDir,
+          CLAUDE_PROJECT_DIR: projectDir,
+          CLAUDE_SESSION_ID: sessionId
+        }
+      );
+
+      assert.strictEqual(result.code, 0, 'SessionStart should exit 0');
+      const homunculusDir = path.join(testDir, '.claude', 'homunculus');
+      const projectsDir = path.join(homunculusDir, 'projects');
+      const projectEntries = fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir) : [];
+      assert.ok(projectEntries.length > 0, 'SessionStart should create a homunculus project directory');
+      const leaseDir = path.join(projectsDir, projectEntries[0], '.observer-sessions');
+      const leaseFiles = fs.existsSync(leaseDir) ? fs.readdirSync(leaseDir).filter(name => name.endsWith('.json')) : [];
+      assert.ok(leaseFiles.length === 1, `Expected one observer lease file, found ${leaseFiles.length}`);
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('session-start injects high-confidence instincts into additionalContext', async () => {
+    const testDir = createTestDir();
+    const projectDir = path.join(testDir, 'project');
+    fs.mkdirSync(projectDir, { recursive: true });
+
+    try {
+      const projectId = crypto.createHash('sha256').update(projectDir).digest('hex').slice(0, 12);
+      const homunculusDir = path.join(testDir, '.claude', 'homunculus');
+      const projectInstinctDir = path.join(homunculusDir, 'projects', projectId, 'instincts', 'personal');
+      const globalInstinctDir = path.join(homunculusDir, 'instincts', 'inherited');
+
+      writeInstinctFile(path.join(projectInstinctDir, 'project-instincts.yaml'), [
+        {
+          id: 'project-tests-first',
+          trigger: 'when changing tests',
+          confidence: 0.9,
+          scope: 'project',
+          action: 'Run the targeted *.test.js file first, then widen to node tests/run-all.js.',
+        },
+        {
+          id: 'project-low-confidence',
+          trigger: 'when guessing',
+          confidence: 0.4,
+          scope: 'project',
+          action: 'This should never be injected.',
+        },
+      ]);
+
+      writeInstinctFile(path.join(globalInstinctDir, 'global-instincts.yaml'), [
+        {
+          id: 'global-validation',
+          trigger: 'when editing hooks',
+          confidence: 0.82,
+          scope: 'global',
+          action: 'Keep hook scripts, tests, and docs aligned in the same change set.',
+        },
+      ]);
+
+      const result = await runHookWithInput(
+        path.join(scriptsDir, 'session-start.js'),
+        {},
+        {
+          HOME: testDir,
+          CLAUDE_PROJECT_DIR: projectDir,
+        }
+      );
+
+      assert.strictEqual(result.code, 0, 'SessionStart should exit 0');
+      const payload = getSessionStartPayload(result.stdout);
+      const additionalContext = payload.hookSpecificOutput.additionalContext;
+
+      assert.ok(additionalContext.includes('Active instincts:'), 'Should inject instinct summary into additionalContext');
+      assert.ok(additionalContext.includes('[project 90%] Run the targeted *.test.js file first, then widen to node tests/run-all.js.'), 'Should include project-scoped instinct');
+      assert.ok(additionalContext.includes('[global 82%] Keep hook scripts, tests, and docs aligned in the same change set.'), 'Should include global instinct');
+      assert.ok(!additionalContext.includes('This should never be injected.'), 'Should exclude low-confidence instincts');
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('session-end-marker removes the last lease and stops the observer process', async () => {
+    const testDir = createTestDir();
+    const projectDir = path.join(testDir, 'project');
+    fs.mkdirSync(projectDir, { recursive: true });
+
+    const sessionId = `session-${Date.now()}`;
+    const sleeper = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000)"], {
+      stdio: 'ignore'
+    });
+
+    try {
+      await runHookWithInput(
+        path.join(scriptsDir, 'session-start.js'),
+        {},
+        {
+          HOME: testDir,
+          CLAUDE_PROJECT_DIR: projectDir,
+          CLAUDE_SESSION_ID: sessionId
+        }
+      );
+
+      const homunculusDir = path.join(testDir, '.claude', 'homunculus');
+      const projectsDir = path.join(homunculusDir, 'projects');
+      const projectEntries = fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir) : [];
+      assert.ok(projectEntries.length > 0, 'Expected SessionStart to create a homunculus project directory');
+      const projectStorageDir = path.join(projectsDir, projectEntries[0]);
+      const pidFile = path.join(projectStorageDir, '.observer.pid');
+      fs.writeFileSync(pidFile, `${sleeper.pid}\n`);
+
+      const markerInput = { hook_event_name: 'SessionEnd' };
+      const result = await runHookWithInput(
+        path.join(scriptsDir, 'session-end-marker.js'),
+        markerInput,
+        {
+          HOME: testDir,
+          CLAUDE_PROJECT_DIR: projectDir,
+          CLAUDE_SESSION_ID: sessionId
+        }
+      );
+
+      assert.strictEqual(result.code, 0, 'SessionEnd marker should exit 0');
+      assert.strictEqual(result.stdout, JSON.stringify(markerInput), 'SessionEnd marker should pass stdin through unchanged');
+
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const exited = sleeper.exitCode !== null || sleeper.signalCode !== null;
+      let processAlive = !exited;
+      if (processAlive) {
+        try {
+          process.kill(sleeper.pid, 0);
+        } catch {
+          processAlive = false;
+        }
+      }
+      assert.strictEqual(processAlive, false, 'SessionEnd marker should stop the observer process when the last lease ends');
+
+      const leaseDir = path.join(projectStorageDir, '.observer-sessions');
+      const leaseFiles = fs.existsSync(leaseDir) ? fs.readdirSync(leaseDir).filter(name => name.endsWith('.json')) : [];
+      assert.strictEqual(leaseFiles.length, 0, 'SessionEnd marker should remove the finished session lease');
+      assert.strictEqual(fs.existsSync(pidFile), false, 'SessionEnd marker should remove the observer pid file after stopping it');
+    } finally {
+      sleeper.kill();
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
   if (await asyncTest('dev server hook transforms yarn dev to tmux session', async () => {
     // The auto-tmux dev hook transforms dev commands (yarn dev, npm run dev, etc.)
-    const hookCommand = hooks.hooks.PreToolUse[0].hooks[0].command;
+    const hookCommand = getHookCommandByDescription(
+      hooks,
+      'PreToolUse',
+      'Auto-start dev servers in tmux'
+    );
     const result = await runHookCommand(hookCommand, {
       tool_input: { command: 'yarn dev' }
     });
@@ -292,6 +497,50 @@ async function runTests() {
       const parsed = JSON.parse(output);
       assert.ok(parsed.tool_input, 'Should output valid JSON with tool_input');
       assert.ok(parsed.tool_input.command, 'Should have a command in output');
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('MCP health hook blocks unhealthy MCP tool calls through hooks.json', async () => {
+    const hookCommand = getHookCommandByDescription(
+      hooks,
+      'PreToolUse',
+      'Check MCP server health before MCP tool execution'
+    );
+
+    const testDir = createTestDir();
+    const configPath = path.join(testDir, 'claude.json');
+    const statePath = path.join(testDir, 'mcp-health.json');
+    const serverScript = path.join(testDir, 'broken-mcp.js');
+
+    try {
+      fs.writeFileSync(serverScript, 'process.exit(1);\n');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          mcpServers: {
+            broken: {
+              command: process.execPath,
+              args: [serverScript]
+            }
+          }
+        })
+      );
+
+      const result = await runHookCommand(
+        hookCommand,
+        { tool_name: 'mcp__broken__search', tool_input: {} },
+        {
+          CLAUDE_HOOK_EVENT_NAME: 'PreToolUse',
+          ECC_MCP_CONFIG_PATH: configPath,
+          ECC_MCP_HEALTH_STATE_PATH: statePath,
+          ECC_MCP_HEALTH_TIMEOUT_MS: '100'
+        }
+      );
+
+      assert.strictEqual(result.code, 2, 'Expected unhealthy MCP preflight to block');
+      assert.ok(result.stderr.includes('broken is unavailable'), `Expected health warning, got: ${result.stderr}`);
+    } finally {
+      cleanupTestDir(testDir);
     }
   })) passed++; else failed++;
 
@@ -673,6 +922,7 @@ async function runTests() {
 
           const isInline = hook.command.startsWith('node -e');
           const isFilePath = hook.command.startsWith('node "');
+          const isNpx = hook.command.startsWith('npx ');
           const isShellWrapper =
             hook.command.startsWith('bash "') ||
             hook.command.startsWith('sh "') ||
@@ -681,8 +931,8 @@ async function runTests() {
           const isShellScriptPath = hook.command.endsWith('.sh');
 
           assert.ok(
-            isInline || isFilePath || isShellWrapper || isShellScriptPath,
-            `Hook command in ${hookType} should be node -e, node script, or shell wrapper/script, got: ${hook.command.substring(0, 80)}`
+            isInline || isFilePath || isNpx || isShellWrapper || isShellScriptPath,
+            `Hook command in ${hookType} should be node -e, node script, npx, or shell wrapper/script, got: ${hook.command.substring(0, 80)}`
           );
         }
       }

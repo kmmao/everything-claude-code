@@ -1,15 +1,16 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const { applyInstallPlan } = require('./install/apply');
 const { LEGACY_INSTALL_TARGETS, parseInstallArgs } = require('./install/request');
 const {
   SUPPORTED_INSTALL_TARGETS,
+  listLegacyCompatibilityLanguages,
+  resolveLegacyCompatibilitySelection,
   resolveInstallPlan,
 } = require('./install-manifests');
 const { getInstallTargetAdapter } = require('./install-targets/registry');
-const { createInstallState } = require('./install-state');
 
 const LANGUAGE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const EXCLUDED_GENERATED_SOURCE_SUFFIXES = [
@@ -68,8 +69,11 @@ function readDirectoryNames(dirPath) {
 }
 
 function listAvailableLanguages(sourceRoot = getSourceRoot()) {
-  return readDirectoryNames(path.join(sourceRoot, 'rules'))
-    .filter(name => name !== 'common');
+  return [...new Set([
+    ...listLegacyCompatibilityLanguages(),
+    ...readDirectoryNames(path.join(sourceRoot, 'rules'))
+      .filter(name => name !== 'common'),
+  ])].sort();
 }
 
 function validateLegacyTarget(target) {
@@ -79,6 +83,11 @@ function validateLegacyTarget(target) {
     );
   }
 }
+
+const IGNORED_DIRECTORY_NAMES = new Set([
+  'node_modules',
+  '.git',
+]);
 
 function listFilesRecursive(dirPath) {
   if (!fs.existsSync(dirPath)) {
@@ -91,6 +100,9 @@ function listFilesRecursive(dirPath) {
   for (const entry of entries) {
     const absolutePath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
+      if (IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+        continue;
+      }
       const childFiles = listFilesRecursive(absolutePath);
       for (const childFile of childFiles) {
         files.push(path.join(entry.name, childFile));
@@ -106,6 +118,16 @@ function listFilesRecursive(dirPath) {
 function isGeneratedRuntimeSourcePath(sourceRelativePath) {
   const normalizedPath = String(sourceRelativePath || '').replace(/\\/g, '/');
   return EXCLUDED_GENERATED_SOURCE_SUFFIXES.some(suffix => normalizedPath.endsWith(suffix));
+}
+
+function createStatePreview(options) {
+  const { createInstallState } = require('./install-state');
+  return createInstallState(options);
+}
+
+function applyInstallPlan(plan) {
+  const { applyInstallPlan: applyPlan } = require('./install/apply');
+  return applyPlan(plan);
 }
 
 function buildCopyFileOperation({ moduleId, sourcePath, sourceRelativePath, destinationPath, strategy }) {
@@ -421,7 +443,7 @@ function planAntigravityLegacyInstall(context) {
 function createLegacyInstallPlan(options = {}) {
   const sourceRoot = options.sourceRoot || getSourceRoot();
   const projectRoot = options.projectRoot || process.cwd();
-  const homeDir = options.homeDir || process.env.HOME;
+  const homeDir = options.homeDir || process.env.HOME || os.homedir();
   const target = options.target || 'claude';
 
   validateLegacyTarget(target);
@@ -449,7 +471,7 @@ function createLegacyInstallPlan(options = {}) {
     manifestVersion: getManifestVersion(sourceRoot),
   };
 
-  const statePreview = createInstallState({
+  const statePreview = createStatePreview({
     adapter: plan.adapter,
     targetRoot: plan.targetRoot,
     installStatePath: plan.installStatePath,
@@ -483,6 +505,38 @@ function createLegacyInstallPlan(options = {}) {
     operations: plan.operations,
     statePreview,
   };
+}
+
+function createLegacyCompatInstallPlan(options = {}) {
+  const sourceRoot = options.sourceRoot || getSourceRoot();
+  const projectRoot = options.projectRoot || process.cwd();
+  const target = options.target || 'claude';
+
+  validateLegacyTarget(target);
+
+  const selection = resolveLegacyCompatibilitySelection({
+    repoRoot: sourceRoot,
+    target,
+    legacyLanguages: options.legacyLanguages || [],
+  });
+
+  return createManifestInstallPlan({
+    sourceRoot,
+    projectRoot,
+    homeDir: options.homeDir,
+    target,
+    profileId: null,
+    moduleIds: selection.moduleIds,
+    includeComponentIds: [],
+    excludeComponentIds: [],
+    legacyLanguages: selection.legacyLanguages,
+    legacyMode: true,
+    requestProfileId: null,
+    requestModuleIds: [],
+    requestIncludeComponentIds: [],
+    requestExcludeComponentIds: [],
+    mode: 'legacy-compat',
+  });
 }
 
 function materializeScaffoldOperation(sourceRoot, operation) {
@@ -526,6 +580,21 @@ function createManifestInstallPlan(options = {}) {
   const sourceRoot = options.sourceRoot || getSourceRoot();
   const projectRoot = options.projectRoot || process.cwd();
   const target = options.target || 'claude';
+  const legacyLanguages = Array.isArray(options.legacyLanguages)
+    ? [...options.legacyLanguages]
+    : [];
+  const requestProfileId = Object.hasOwn(options, 'requestProfileId')
+    ? options.requestProfileId
+    : (options.profileId || null);
+  const requestModuleIds = Object.hasOwn(options, 'requestModuleIds')
+    ? [...options.requestModuleIds]
+    : (Array.isArray(options.moduleIds) ? [...options.moduleIds] : []);
+  const requestIncludeComponentIds = Object.hasOwn(options, 'requestIncludeComponentIds')
+    ? [...options.requestIncludeComponentIds]
+    : (Array.isArray(options.includeComponentIds) ? [...options.includeComponentIds] : []);
+  const requestExcludeComponentIds = Object.hasOwn(options, 'requestExcludeComponentIds')
+    ? [...options.requestExcludeComponentIds]
+    : (Array.isArray(options.excludeComponentIds) ? [...options.excludeComponentIds] : []);
   const plan = resolveInstallPlan({
     repoRoot: sourceRoot,
     projectRoot,
@@ -543,21 +612,17 @@ function createManifestInstallPlan(options = {}) {
     repoCommit: getRepoCommit(sourceRoot),
     manifestVersion: getManifestVersion(sourceRoot),
   };
-  const statePreview = createInstallState({
+  const statePreview = createStatePreview({
     adapter,
     targetRoot: plan.targetRoot,
     installStatePath: plan.installStatePath,
     request: {
-      profile: plan.profileId,
-      modules: Array.isArray(options.moduleIds) ? [...options.moduleIds] : [],
-      includeComponents: Array.isArray(options.includeComponentIds)
-        ? [...options.includeComponentIds]
-        : [],
-      excludeComponents: Array.isArray(options.excludeComponentIds)
-        ? [...options.excludeComponentIds]
-        : [],
-      legacyLanguages: [],
-      legacyMode: false,
+      profile: requestProfileId,
+      modules: requestModuleIds,
+      includeComponents: requestIncludeComponentIds,
+      excludeComponents: requestExcludeComponentIds,
+      legacyLanguages,
+      legacyMode: Boolean(options.legacyMode),
     },
     resolution: {
       selectedModules: plan.selectedModuleIds,
@@ -568,7 +633,7 @@ function createManifestInstallPlan(options = {}) {
   });
 
   return {
-    mode: 'manifest',
+    mode: options.mode || 'manifest',
     target,
     adapter: {
       id: adapter.id,
@@ -578,8 +643,9 @@ function createManifestInstallPlan(options = {}) {
     targetRoot: plan.targetRoot,
     installRoot: plan.targetRoot,
     installStatePath: plan.installStatePath,
-    warnings: [],
-    languages: [],
+    warnings: Array.isArray(options.warnings) ? [...options.warnings] : [],
+    languages: legacyLanguages,
+    legacyLanguages,
     profileId: plan.profileId,
     requestedModuleIds: plan.requestedModuleIds,
     explicitModuleIds: plan.explicitModuleIds,
@@ -597,6 +663,7 @@ module.exports = {
   SUPPORTED_INSTALL_TARGETS,
   LEGACY_INSTALL_TARGETS,
   applyInstallPlan,
+  createLegacyCompatInstallPlan,
   createManifestInstallPlan,
   createLegacyInstallPlan,
   getSourceRoot,

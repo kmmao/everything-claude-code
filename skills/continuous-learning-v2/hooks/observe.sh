@@ -57,7 +57,8 @@ fi
 # ─────────────────────────────────────────────
 
 # Extract cwd from the hook JSON to use for project detection.
-# This avoids spawning a separate git subprocess when cwd is available.
+# If cwd is a subdirectory inside a git repo, resolve it to the repo root so
+# observations attach to the project instead of a nested path.
 STDIN_CWD=$(echo "$INPUT_JSON" | "$PYTHON_CMD" -c '
 import json, sys
 try:
@@ -70,17 +71,25 @@ except(KeyError, TypeError, ValueError):
 
 # If cwd was provided in stdin, use it for project detection
 if [ -n "$STDIN_CWD" ] && [ -d "$STDIN_CWD" ]; then
-  export CLAUDE_PROJECT_DIR="$STDIN_CWD"
+  _GIT_ROOT=$(git -C "$STDIN_CWD" rev-parse --show-toplevel 2>/dev/null || true)
+  export CLAUDE_PROJECT_DIR="${_GIT_ROOT:-$STDIN_CWD}"
 fi
 
 # ─────────────────────────────────────────────
 # Lightweight config and automated session guards
 # ─────────────────────────────────────────────
+#
+# IMPORTANT: keep these guards above detect-project.sh.
+# Sourcing detect-project.sh creates project-scoped directories and updates
+# projects.json, so automated sessions must return before that point.
 
 CONFIG_DIR="${HOME}/.claude/homunculus"
 
-# Skip if disabled
+# Skip if disabled (check both default and CLV2_CONFIG-derived locations)
 if [ -f "$CONFIG_DIR/disabled" ]; then
+  exit 0
+fi
+if [ -n "${CLV2_CONFIG:-}" ] && [ -f "$(dirname "$CLV2_CONFIG")/disabled" ]; then
   exit 0
 fi
 
@@ -90,8 +99,11 @@ fi
 #   - automated sessions creating project-scoped homunculus metadata
 
 # Layer 1: entrypoint. Only interactive terminal sessions should continue.
+# sdk-ts: Agent SDK sessions can be human-interactive (e.g. via Happy).
+# Non-interactive SDK automation is still filtered by Layers 2-5 below
+# (ECC_HOOK_PROFILE=minimal, ECC_SKIP_OBSERVE=1, agent_id, path exclusions).
 case "${CLAUDE_CODE_ENTRYPOINT:-cli}" in
-  cli) ;;
+  cli|sdk-ts) ;;
   *) exit 0 ;;
 esac
 
@@ -271,14 +283,146 @@ if parsed["output"] is not None:
 print(json.dumps(observation))
 ' >> "$OBSERVATIONS_FILE"
 
-# Signal observer if running (check both project-scoped and global observer)
-for pid_file in "${PROJECT_DIR}/.observer.pid" "${CONFIG_DIR}/.observer.pid"; do
+# Lazy-start observer if enabled but not running (first-time setup)
+# Use flock for atomic check-then-act to prevent race conditions
+# Fallback for macOS (no flock): use lockfile or skip
+LAZY_START_LOCK="${PROJECT_DIR}/.observer-start.lock"
+_CHECK_OBSERVER_RUNNING() {
+  local pid_file="$1"
   if [ -f "$pid_file" ]; then
-    observer_pid=$(cat "$pid_file")
-    if kill -0 "$observer_pid" 2>/dev/null; then
-      kill -USR1 "$observer_pid" 2>/dev/null || true
+    local pid
+    pid=$(cat "$pid_file" 2>/dev/null)
+    # Validate PID is a positive integer (>1) to prevent signaling invalid targets
+    case "$pid" in
+      ''|*[!0-9]*|0|1)
+        rm -f "$pid_file" 2>/dev/null || true
+        return 1
+        ;;
+    esac
+    if kill -0 "$pid" 2>/dev/null; then
+      return 0  # Process is alive
+    fi
+    # Stale PID file - remove it
+    rm -f "$pid_file" 2>/dev/null || true
+  fi
+  return 1  # No PID file or process dead
+}
+
+if [ -f "${CONFIG_DIR}/disabled" ]; then
+  OBSERVER_ENABLED=false
+else
+  OBSERVER_ENABLED=false
+  CONFIG_FILE="${SKILL_ROOT}/config.json"
+  # Allow CLV2_CONFIG override
+  if [ -n "${CLV2_CONFIG:-}" ]; then
+    CONFIG_FILE="$CLV2_CONFIG"
+  fi
+  # Use effective config path for both existence check and reading
+  EFFECTIVE_CONFIG="$CONFIG_FILE"
+  if [ -f "$EFFECTIVE_CONFIG" ] && [ -n "$PYTHON_CMD" ]; then
+    _enabled=$(CLV2_CONFIG_PATH="$EFFECTIVE_CONFIG" "$PYTHON_CMD" -c "
+import json, os
+with open(os.environ['CLV2_CONFIG_PATH']) as f:
+    cfg = json.load(f)
+print(str(cfg.get('observer', {}).get('enabled', False)).lower())
+" 2>/dev/null || echo "false")
+    if [ "$_enabled" = "true" ]; then
+      OBSERVER_ENABLED=true
     fi
   fi
-done
+fi
+
+# Check both project-scoped AND global PID files (with stale PID recovery)
+if [ "$OBSERVER_ENABLED" = "true" ]; then
+  # Clean up stale PID files first
+  _CHECK_OBSERVER_RUNNING "${PROJECT_DIR}/.observer.pid" || true
+  _CHECK_OBSERVER_RUNNING "${CONFIG_DIR}/.observer.pid" || true
+
+  # Check if observer is now running after cleanup
+  if [ ! -f "${PROJECT_DIR}/.observer.pid" ] && [ ! -f "${CONFIG_DIR}/.observer.pid" ]; then
+    # Use flock if available (Linux), fallback for macOS
+    if command -v flock >/dev/null 2>&1; then
+      (
+        flock -n 9 || exit 0
+        # Double-check PID files after acquiring lock
+        _CHECK_OBSERVER_RUNNING "${PROJECT_DIR}/.observer.pid" || true
+        _CHECK_OBSERVER_RUNNING "${CONFIG_DIR}/.observer.pid" || true
+        if [ ! -f "${PROJECT_DIR}/.observer.pid" ] && [ ! -f "${CONFIG_DIR}/.observer.pid" ]; then
+          nohup "${SKILL_ROOT}/agents/start-observer.sh" start >/dev/null 2>&1 &
+        fi
+      ) 9>"$LAZY_START_LOCK"
+    else
+      # macOS fallback: use lockfile if available, otherwise mkdir-based lock
+      if command -v lockfile >/dev/null 2>&1; then
+        # Use subshell to isolate exit and add trap for cleanup
+        (
+          trap 'rm -f "$LAZY_START_LOCK" 2>/dev/null || true' EXIT
+          lockfile -r 1 -l 30 "$LAZY_START_LOCK" 2>/dev/null || exit 0
+          _CHECK_OBSERVER_RUNNING "${PROJECT_DIR}/.observer.pid" || true
+          _CHECK_OBSERVER_RUNNING "${CONFIG_DIR}/.observer.pid" || true
+          if [ ! -f "${PROJECT_DIR}/.observer.pid" ] && [ ! -f "${CONFIG_DIR}/.observer.pid" ]; then
+            nohup "${SKILL_ROOT}/agents/start-observer.sh" start >/dev/null 2>&1 &
+          fi
+          rm -f "$LAZY_START_LOCK" 2>/dev/null || true
+        )
+      else
+        # POSIX fallback: mkdir is atomic -- fails if dir already exists
+        (
+          trap 'rmdir "${LAZY_START_LOCK}.d" 2>/dev/null || true' EXIT
+          mkdir "${LAZY_START_LOCK}.d" 2>/dev/null || exit 0
+          _CHECK_OBSERVER_RUNNING "${PROJECT_DIR}/.observer.pid" || true
+          _CHECK_OBSERVER_RUNNING "${CONFIG_DIR}/.observer.pid" || true
+          if [ ! -f "${PROJECT_DIR}/.observer.pid" ] && [ ! -f "${CONFIG_DIR}/.observer.pid" ]; then
+            nohup "${SKILL_ROOT}/agents/start-observer.sh" start >/dev/null 2>&1 &
+          fi
+        )
+      fi
+    fi
+  fi
+fi
+
+# Throttle SIGUSR1: only signal observer every N observations (#521)
+# This prevents rapid signaling when tool calls fire every second,
+# which caused runaway parallel Claude analysis processes.
+SIGNAL_EVERY_N="${ECC_OBSERVER_SIGNAL_EVERY_N:-20}"
+SIGNAL_COUNTER_FILE="${PROJECT_DIR}/.observer-signal-counter"
+ACTIVITY_FILE="${PROJECT_DIR}/.observer-last-activity"
+
+touch "$ACTIVITY_FILE" 2>/dev/null || true
+
+should_signal=0
+if [ -f "$SIGNAL_COUNTER_FILE" ]; then
+  counter=$(cat "$SIGNAL_COUNTER_FILE" 2>/dev/null || echo 0)
+  counter=$((counter + 1))
+  if [ "$counter" -ge "$SIGNAL_EVERY_N" ]; then
+    should_signal=1
+    counter=0
+  fi
+  echo "$counter" > "$SIGNAL_COUNTER_FILE"
+else
+  echo "1" > "$SIGNAL_COUNTER_FILE"
+fi
+
+# Signal observer if running and throttle allows (check both project-scoped and global observer, deduplicate)
+if [ "$should_signal" -eq 1 ]; then
+  signaled_pids=" "
+  for pid_file in "${PROJECT_DIR}/.observer.pid" "${CONFIG_DIR}/.observer.pid"; do
+    if [ -f "$pid_file" ]; then
+      observer_pid=$(cat "$pid_file" 2>/dev/null || true)
+      # Validate PID is a positive integer (>1)
+      case "$observer_pid" in
+        ''|*[!0-9]*|0|1) rm -f "$pid_file" 2>/dev/null || true; continue ;;
+      esac
+      # Deduplicate: skip if already signaled this pass
+      case "$signaled_pids" in
+        *" $observer_pid "*) continue ;;
+      esac
+      if kill -0 "$observer_pid" 2>/dev/null; then
+        kill -USR1 "$observer_pid" 2>/dev/null || true
+        signaled_pids="${signaled_pids}${observer_pid} "
+      fi
+    fi
+  done
+fi
 
 exit 0

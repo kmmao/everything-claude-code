@@ -10,9 +10,12 @@ const path = require('path');
 const {
   loadInstallManifests,
   listInstallComponents,
+  listLegacyCompatibilityLanguages,
   listInstallModules,
   listInstallProfiles,
   resolveInstallPlan,
+  resolveLegacyCompatibilitySelection,
+  validateInstallModuleIds,
 } = require('../../scripts/lib/install-manifests');
 
 function test(name, fn) {
@@ -71,8 +74,31 @@ function runTests() {
     const components = listInstallComponents();
     assert.ok(components.some(component => component.id === 'lang:typescript'),
       'Should include lang:typescript');
+    assert.ok(components.some(component => component.id === 'lang:c'),
+      'Should include lang:c');
     assert.ok(components.some(component => component.id === 'capability:security'),
       'Should include capability:security');
+  })) passed++; else failed++;
+
+  if (test('labels continuous-learning as a legacy v1 install surface', () => {
+    const components = listInstallComponents({ family: 'skill' });
+    const component = components.find(entry => entry.id === 'skill:continuous-learning');
+    assert.ok(component, 'Should include skill:continuous-learning');
+    assert.match(component.description, /legacy/i, 'Should label continuous-learning as legacy');
+    assert.match(component.description, /continuous-learning-v2/, 'Should point new installs to continuous-learning-v2');
+  })) passed++; else failed++;
+
+  if (test('lists supported legacy compatibility languages', () => {
+    const languages = listLegacyCompatibilityLanguages();
+    assert.ok(languages.includes('typescript'));
+    assert.ok(languages.includes('python'));
+    assert.ok(languages.includes('go'));
+    assert.ok(languages.includes('golang'));
+    assert.ok(languages.includes('kotlin'));
+    assert.ok(languages.includes('rust'));
+    assert.ok(languages.includes('cpp'));
+    assert.ok(languages.includes('c'));
+    assert.ok(languages.includes('csharp'));
   })) passed++; else failed++;
 
   if (test('resolves a real project profile with target-specific skips', () => {
@@ -97,6 +123,21 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('resolves antigravity profiles while skipping only unsupported modules', () => {
+    const projectRoot = '/workspace/app';
+    const plan = resolveInstallPlan({ profileId: 'core', target: 'antigravity', projectRoot });
+
+    assert.deepStrictEqual(
+      plan.selectedModuleIds,
+      ['rules-core', 'agents-core', 'commands-core', 'platform-configs', 'workflow-quality']
+    );
+    assert.ok(plan.skippedModuleIds.includes('hooks-runtime'));
+    assert.ok(!plan.skippedModuleIds.includes('platform-configs'));
+    assert.ok(!plan.skippedModuleIds.includes('workflow-quality'));
+    assert.strictEqual(plan.targetAdapterId, 'antigravity-project');
+    assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.agent'));
+  })) passed++; else failed++;
+
   if (test('resolves explicit modules with dependency expansion', () => {
     const plan = resolveInstallPlan({ moduleIds: ['security'] });
     assert.ok(plan.selectedModuleIds.includes('security'), 'Should include requested module');
@@ -104,6 +145,94 @@ function runTests() {
       'Should include transitive dependency');
     assert.ok(plan.selectedModuleIds.includes('platform-configs'),
       'Should include nested dependency');
+  })) passed++; else failed++;
+
+  if (test('validates explicit module IDs against the real manifest catalog', () => {
+    const moduleIds = validateInstallModuleIds(['security', 'security', 'platform-configs']);
+    assert.deepStrictEqual(moduleIds, ['security', 'platform-configs']);
+    assert.throws(
+      () => validateInstallModuleIds(['ghost-module']),
+      /Unknown install module: ghost-module/
+    );
+  })) passed++; else failed++;
+
+  if (test('resolves legacy compatibility selections into manifest module IDs', () => {
+    const selection = resolveLegacyCompatibilitySelection({
+      target: 'cursor',
+      legacyLanguages: ['typescript', 'go', 'golang'],
+    });
+
+    assert.deepStrictEqual(selection.legacyLanguages, ['typescript', 'go', 'golang']);
+    assert.ok(selection.moduleIds.includes('rules-core'));
+    assert.ok(selection.moduleIds.includes('agents-core'));
+    assert.ok(selection.moduleIds.includes('commands-core'));
+    assert.ok(selection.moduleIds.includes('hooks-runtime'));
+    assert.ok(selection.moduleIds.includes('platform-configs'));
+    assert.ok(selection.moduleIds.includes('workflow-quality'));
+    assert.ok(selection.moduleIds.includes('framework-language'));
+  })) passed++; else failed++;
+
+  if (test('resolves rust legacy compatibility into framework-language module', () => {
+    const selection = resolveLegacyCompatibilitySelection({
+      target: 'cursor',
+      legacyLanguages: ['rust'],
+    });
+
+    assert.ok(selection.moduleIds.includes('rules-core'));
+    assert.ok(selection.moduleIds.includes('framework-language'),
+      'rust should resolve to framework-language module');
+  })) passed++; else failed++;
+
+  if (test('resolves cpp legacy compatibility into framework-language module', () => {
+    const selection = resolveLegacyCompatibilitySelection({
+      target: 'cursor',
+      legacyLanguages: ['cpp'],
+    });
+
+    assert.ok(selection.moduleIds.includes('rules-core'));
+    assert.ok(selection.moduleIds.includes('framework-language'),
+      'cpp should resolve to framework-language module');
+  })) passed++; else failed++;
+
+  if (test('resolves c legacy compatibility into framework-language module', () => {
+    const selection = resolveLegacyCompatibilitySelection({
+      target: 'cursor',
+      legacyLanguages: ['c'],
+    });
+
+    assert.ok(selection.moduleIds.includes('rules-core'));
+    assert.ok(selection.moduleIds.includes('framework-language'),
+      'c should resolve to framework-language module');
+  })) passed++; else failed++;
+
+  if (test('resolves csharp legacy compatibility into framework-language module', () => {
+    const selection = resolveLegacyCompatibilitySelection({
+      target: 'cursor',
+      legacyLanguages: ['csharp'],
+    });
+
+    assert.ok(selection.moduleIds.includes('rules-core'));
+    assert.ok(selection.moduleIds.includes('framework-language'),
+      'csharp should resolve to framework-language module');
+  })) passed++; else failed++;
+
+  if (test('keeps antigravity legacy compatibility selections target-safe', () => {
+    const selection = resolveLegacyCompatibilitySelection({
+      target: 'antigravity',
+      legacyLanguages: ['typescript'],
+    });
+
+    assert.deepStrictEqual(selection.moduleIds, ['rules-core', 'agents-core', 'commands-core']);
+  })) passed++; else failed++;
+
+  if (test('rejects unknown legacy compatibility languages', () => {
+    assert.throws(
+      () => resolveLegacyCompatibilitySelection({
+        target: 'cursor',
+        legacyLanguages: ['brainfuck'],
+      }),
+      /Unknown legacy language: brainfuck/
+    );
   })) passed++; else failed++;
 
   if (test('resolves included and excluded user-facing components', () => {
@@ -146,47 +275,142 @@ function runTests() {
     );
   })) passed++; else failed++;
 
-  if (test('throws when a dependency does not support the requested target', () => {
-    const repoRoot = createTestRepo();
-    writeJson(path.join(repoRoot, 'manifests', 'install-modules.json'), {
-      version: 1,
-      modules: [
-        {
-          id: 'parent',
-          kind: 'skills',
-          description: 'Parent',
-          paths: ['parent'],
-          targets: ['claude'],
-          dependencies: ['child'],
-          defaultInstall: false,
-          cost: 'light',
-          stability: 'stable'
-        },
-        {
-          id: 'child',
-          kind: 'skills',
-          description: 'Child',
-          paths: ['child'],
-          targets: ['cursor'],
-          dependencies: [],
-          defaultInstall: false,
-          cost: 'light',
-          stability: 'stable'
-        }
-      ]
-    });
-    writeJson(path.join(repoRoot, 'manifests', 'install-profiles.json'), {
-      version: 1,
-      profiles: {
-        core: { description: 'Core', modules: ['parent'] }
-      }
-    });
-
+  if (test('validates projectRoot and homeDir option types before adapter planning', () => {
     assert.throws(
-      () => resolveInstallPlan({ repoRoot, profileId: 'core', target: 'claude' }),
-      /does not support target claude/
+      () => resolveInstallPlan({ profileId: 'core', target: 'cursor', projectRoot: 42 }),
+      /projectRoot must be a non-empty string when provided/
     );
-    cleanupTestRepo(repoRoot);
+    assert.throws(
+      () => resolveInstallPlan({ profileId: 'core', target: 'claude', homeDir: {} }),
+      /homeDir must be a non-empty string when provided/
+    );
+  })) passed++; else failed++;
+
+  if (test('skips a requested module when its dependency chain does not support the target', () => {
+    const repoRoot = createTestRepo();
+    try {
+      writeJson(path.join(repoRoot, 'manifests', 'install-modules.json'), {
+        version: 1,
+        modules: [
+          {
+            id: 'parent',
+            kind: 'skills',
+            description: 'Parent',
+            paths: ['parent'],
+            targets: ['claude'],
+            dependencies: ['child'],
+            defaultInstall: false,
+            cost: 'light',
+            stability: 'stable'
+          },
+          {
+            id: 'child',
+            kind: 'skills',
+            description: 'Child',
+            paths: ['child'],
+            targets: ['cursor'],
+            dependencies: [],
+            defaultInstall: false,
+            cost: 'light',
+            stability: 'stable'
+          }
+        ]
+      });
+      writeJson(path.join(repoRoot, 'manifests', 'install-profiles.json'), {
+        version: 1,
+        profiles: {
+          core: { description: 'Core', modules: ['parent'] }
+        }
+      });
+
+      const plan = resolveInstallPlan({ repoRoot, profileId: 'core', target: 'claude' });
+      assert.deepStrictEqual(plan.selectedModuleIds, []);
+      assert.deepStrictEqual(plan.skippedModuleIds, ['parent']);
+    } finally {
+      cleanupTestRepo(repoRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('fails fast when install manifest module targets is not an array', () => {
+    const repoRoot = createTestRepo();
+    try {
+      writeJson(path.join(repoRoot, 'manifests', 'install-modules.json'), {
+        version: 1,
+        modules: [
+          {
+            id: 'parent',
+            kind: 'skills',
+            description: 'Parent',
+            paths: ['parent'],
+            targets: 'claude',
+            dependencies: [],
+            defaultInstall: false,
+            cost: 'light',
+            stability: 'stable'
+          }
+        ]
+      });
+      writeJson(path.join(repoRoot, 'manifests', 'install-profiles.json'), {
+        version: 1,
+        profiles: {
+          core: { description: 'Core', modules: ['parent'] }
+        }
+      });
+
+      assert.throws(
+        () => resolveInstallPlan({ repoRoot, profileId: 'core', target: 'claude' }),
+        /Install module parent has invalid targets; expected an array of supported target ids/
+      );
+    } finally {
+      cleanupTestRepo(repoRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('keeps antigravity modules selected while filtering unsupported source paths', () => {
+    const repoRoot = createTestRepo();
+    try {
+      writeJson(path.join(repoRoot, 'manifests', 'install-modules.json'), {
+        version: 1,
+        modules: [
+          {
+            id: 'unsupported-antigravity',
+            kind: 'skills',
+            description: 'Unsupported',
+            paths: ['.cursor', 'skills/example'],
+            targets: ['antigravity'],
+            dependencies: [],
+            defaultInstall: false,
+            cost: 'light',
+            stability: 'stable'
+          }
+        ]
+      });
+      writeJson(path.join(repoRoot, 'manifests', 'install-profiles.json'), {
+        version: 1,
+        profiles: {
+          core: { description: 'Core', modules: ['unsupported-antigravity'] }
+        }
+      });
+
+      const plan = resolveInstallPlan({
+        repoRoot,
+        profileId: 'core',
+        target: 'antigravity',
+        projectRoot: '/workspace/app',
+      });
+      assert.deepStrictEqual(plan.selectedModuleIds, ['unsupported-antigravity']);
+      assert.deepStrictEqual(plan.skippedModuleIds, []);
+      assert.ok(
+        plan.operations.every(operation => operation.sourceRelativePath !== '.cursor'),
+        'Unsupported antigravity paths should be filtered from planned operations'
+      );
+      assert.ok(
+        plan.operations.some(operation => operation.sourceRelativePath === 'skills/example'),
+        'Supported antigravity skill paths should still be planned'
+      );
+    } finally {
+      cleanupTestRepo(repoRoot);
+    }
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

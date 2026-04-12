@@ -13,6 +13,10 @@ const COMMANDS = {
     script: 'install-plan.js',
     description: 'Inspect selective-install manifests and resolved plans',
   },
+  catalog: {
+    script: 'catalog.js',
+    description: 'Discover install profiles and component IDs',
+  },
   'install-plan': {
     script: 'install-plan.js',
     description: 'Alias for plan',
@@ -29,6 +33,14 @@ const COMMANDS = {
     script: 'repair.js',
     description: 'Restore drifted or missing ECC-managed files',
   },
+  status: {
+    script: 'status.js',
+    description: 'Query the ECC SQLite state store status summary',
+  },
+  sessions: {
+    script: 'sessions-cli.js',
+    description: 'List or inspect ECC sessions from the SQLite state store',
+  },
   'session-inspect': {
     script: 'session-inspect.js',
     description: 'Emit canonical ECC session snapshots from dmux or Claude history targets',
@@ -42,9 +54,12 @@ const COMMANDS = {
 const PRIMARY_COMMANDS = [
   'install',
   'plan',
+  'catalog',
   'list-installed',
   'doctor',
   'repair',
+  'status',
+  'sessions',
   'session-inspect',
   'uninstall',
 ];
@@ -69,9 +84,15 @@ Examples:
   ecc typescript
   ecc install --profile developer --target claude
   ecc plan --profile core --target cursor
+  ecc catalog profiles
+  ecc catalog components --family language
+  ecc catalog show framework:nextjs
   ecc list-installed --json
   ecc doctor --target cursor
   ecc repair --dry-run
+  ecc status --json
+  ecc sessions
+  ecc sessions session-active --json
   ecc session-inspect claude:latest
   ecc uninstall --target antigravity --dry-run
 `);
@@ -137,6 +158,7 @@ function runCommand(commandName, args) {
       cwd: process.cwd(),
       env: process.env,
       encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
     }
   );
 

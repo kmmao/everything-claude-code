@@ -1,135 +1,43 @@
-# Orchestrate Command
+---
+description: Legacy slash-entry shim for dmux-workflows and autonomous-agent-harness. Prefer the skills directly.
+---
 
-Sequential agent workflow for complex tasks.
+# Orchestrate Command (Legacy Shim)
 
-## Usage
+Use this only if you still invoke `/orchestrate`. The maintained orchestration guidance lives in `skills/dmux-workflows/SKILL.md` and `skills/autonomous-agent-harness/SKILL.md`.
 
-`/orchestrate [workflow-type] [task-description]`
+## Canonical Surface
 
-## Workflow Types
+- Prefer `dmux-workflows` for parallel panes, worktrees, and multi-agent splits.
+- Prefer `autonomous-agent-harness` for longer-running loops, governance, scheduling, and control-plane style execution.
+- Keep this file only as a compatibility entry point.
 
-### feature
-Full feature implementation workflow:
-```
-planner -> tdd-guide -> code-reviewer -> security-reviewer
-```
+## Arguments
 
-### bugfix
-Bug investigation and fix workflow:
-```
-planner -> tdd-guide -> code-reviewer
-```
+`$ARGUMENTS`
 
-### refactor
-Safe refactoring workflow:
-```
-architect -> code-reviewer -> tdd-guide
-```
+## Delegation
 
-### security
-Security-focused review:
-```
-security-reviewer -> code-reviewer -> architect
-```
-
-## Execution Pattern
-
-For each agent in the workflow:
-
-1. **Invoke agent** with context from previous agent
-2. **Collect output** as structured handoff document
-3. **Pass to next agent** in chain
-4. **Aggregate results** into final report
-
-## Handoff Document Format
-
-Between agents, create handoff document:
-
-```markdown
-## HANDOFF: [previous-agent] -> [next-agent]
-
-### Context
-[Summary of what was done]
-
-### Findings
-[Key discoveries or decisions]
-
-### Files Modified
-[List of files touched]
-
-### Open Questions
-[Unresolved items for next agent]
-
-### Recommendations
-[Suggested next steps]
-```
-
-## Example: Feature Workflow
-
-```
-/orchestrate feature "Add user authentication"
-```
-
-Executes:
-
-1. **Planner Agent**
-   - Analyzes requirements
-   - Creates implementation plan
-   - Identifies dependencies
-   - Output: `HANDOFF: planner -> tdd-guide`
-
-2. **TDD Guide Agent**
-   - Reads planner handoff
-   - Writes tests first
-   - Implements to pass tests
-   - Output: `HANDOFF: tdd-guide -> code-reviewer`
-
-3. **Code Reviewer Agent**
-   - Reviews implementation
-   - Checks for issues
-   - Suggests improvements
-   - Output: `HANDOFF: code-reviewer -> security-reviewer`
-
-4. **Security Reviewer Agent**
-   - Security audit
-   - Vulnerability check
-   - Final approval
-   - Output: Final Report
-
-## Final Report Format
-
-```
-ORCHESTRATION REPORT
-====================
-Workflow: feature
-Task: Add user authentication
-Agents: planner -> tdd-guide -> code-reviewer -> security-reviewer
-
-SUMMARY
--------
-[One paragraph summary]
-
-AGENT OUTPUTS
--------------
-Planner: [summary]
-TDD Guide: [summary]
-Code Reviewer: [summary]
+Apply the orchestration skills instead of maintaining a second workflow spec here.
+- Start with `dmux-workflows` for split/parallel execution.
+- Pull in `autonomous-agent-harness` when the user is really asking for persistent loops, governance, or operator-layer behavior.
+- Keep handoffs structured, but let the skills define the maintained sequencing rules.
 Security Reviewer: [summary]
 
-FILES CHANGED
--------------
+### FILES CHANGED
+
 [List all files modified]
 
-TEST RESULTS
-------------
+### TEST RESULTS
+
 [Test pass/fail summary]
 
-SECURITY STATUS
----------------
+### SECURITY STATUS
+
 [Security findings]
 
-RECOMMENDATION
---------------
+### RECOMMENDATION
+
 [SHIP / NEEDS WORK / BLOCKED]
 ```
 
@@ -203,7 +111,7 @@ Telemetry:
 
 This keeps planner, implementer, reviewer, and loop workers legible from the operator surface.
 
-## Arguments
+## Workflow Arguments
 
 $ARGUMENTS:
 - `feature <description>` - Full feature workflow

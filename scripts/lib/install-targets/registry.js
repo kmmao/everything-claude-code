@@ -1,7 +1,9 @@
 const antigravityProject = require('./antigravity-project');
 const claudeHome = require('./claude-home');
+const codebuddyProject = require('./codebuddy-project');
 const codexHome = require('./codex-home');
 const cursorProject = require('./cursor-project');
+const geminiProject = require('./gemini-project');
 const opencodeHome = require('./opencode-home');
 
 const ADAPTERS = Object.freeze([
@@ -9,7 +11,9 @@ const ADAPTERS = Object.freeze([
   cursorProject,
   antigravityProject,
   codexHome,
+  geminiProject,
   opencodeHome,
+  codebuddyProject,
 ]);
 
 function listInstallTargetAdapters() {
@@ -34,15 +38,16 @@ function planInstallTargetScaffold(options = {}) {
     projectRoot: options.projectRoot || options.repoRoot,
     homeDir: options.homeDir,
   };
+  const validationIssues = adapter.validate(planningInput);
+  const blockingIssues = validationIssues.filter(issue => issue.severity === 'error');
+  if (blockingIssues.length > 0) {
+    throw new Error(blockingIssues.map(issue => issue.message).join('; '));
+  }
   const targetRoot = adapter.resolveRoot(planningInput);
   const installStatePath = adapter.getInstallStatePath(planningInput);
-  const operations = modules.flatMap(module => {
-    const paths = Array.isArray(module.paths) ? module.paths : [];
-    return paths.map(sourceRelativePath => adapter.createScaffoldOperation(
-      module.id,
-      sourceRelativePath,
-      planningInput
-    ));
+  const operations = adapter.planOperations({
+    ...planningInput,
+    modules,
   });
 
   return {
@@ -53,6 +58,7 @@ function planInstallTargetScaffold(options = {}) {
     },
     targetRoot,
     installStatePath,
+    validationIssues,
     operations,
   };
 }

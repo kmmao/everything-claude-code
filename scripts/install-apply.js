@@ -6,23 +6,21 @@
  * target-specific mutation logic into testable Node code.
  */
 
+const os = require('os');
 const {
   SUPPORTED_INSTALL_TARGETS,
-  listAvailableLanguages,
-} = require('./lib/install-executor');
+  listLegacyCompatibilityLanguages,
+} = require('./lib/install-manifests');
 const {
   LEGACY_INSTALL_TARGETS,
   normalizeInstallRequest,
   parseInstallArgs,
 } = require('./lib/install/request');
-const { loadInstallConfig } = require('./lib/install/config');
-const { applyInstallPlan } = require('./lib/install/apply');
-const { createInstallPlanFromRequest } = require('./lib/install/runtime');
 
-function showHelp(exitCode = 0) {
-  const languages = listAvailableLanguages();
+function getHelpText() {
+  const languages = listLegacyCompatibilityLanguages();
 
-  console.log(`
+  return `
 Usage: install.sh [--target <${LEGACY_INSTALL_TARGETS.join('|')}>] [--dry-run] [--json] <language> [<language> ...]
        install.sh [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--dry-run] [--json] --profile <name> [--with <component>]... [--without <component>]...
        install.sh [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--dry-run] [--json] --modules <id,id,...> [--with <component>]... [--without <component>]...
@@ -46,8 +44,11 @@ Options:
 
 Available languages:
 ${languages.map(language => `  - ${language}`).join('\n')}
-`);
+`;
+}
 
+function showHelp(exitCode = 0) {
+  console.log(getHelpText());
   process.exit(exitCode);
 }
 
@@ -61,6 +62,9 @@ function printHumanPlan(plan, dryRun) {
   if (plan.mode === 'legacy') {
     console.log(`Languages: ${plan.languages.join(', ')}`);
   } else {
+    if (plan.mode === 'legacy-compat') {
+      console.log(`Legacy languages: ${plan.legacyLanguages.join(', ')}`);
+    }
     console.log(`Profile: ${plan.profileId || '(custom modules)'}`);
     console.log(`Included components: ${plan.includedComponentIds.join(', ') || '(none)'}`);
     console.log(`Excluded components: ${plan.excludedComponentIds.join(', ') || '(none)'}`);
@@ -100,16 +104,25 @@ function main() {
       showHelp(0);
     }
 
+    const {
+      findDefaultInstallConfigPath,
+      loadInstallConfig,
+    } = require('./lib/install/config');
+    const { applyInstallPlan } = require('./lib/install-executor');
+    const { createInstallPlanFromRequest } = require('./lib/install/runtime');
+    const defaultConfigPath = options.configPath || options.languages.length > 0
+      ? null
+      : findDefaultInstallConfigPath({ cwd: process.cwd() });
     const config = options.configPath
       ? loadInstallConfig(options.configPath, { cwd: process.cwd() })
-      : null;
+      : (defaultConfigPath ? loadInstallConfig(defaultConfigPath, { cwd: process.cwd() }) : null);
     const request = normalizeInstallRequest({
       ...options,
       config,
     });
     const plan = createInstallPlanFromRequest(request, {
       projectRoot: process.cwd(),
-      homeDir: process.env.HOME,
+      homeDir: process.env.HOME || os.homedir(),
       claudeRulesDir: process.env.CLAUDE_RULES_DIR || null,
     });
 
@@ -129,7 +142,7 @@ function main() {
       printHumanPlan(result, false);
     }
   } catch (error) {
-    console.error(`Error: ${error.message}`);
+    process.stderr.write(`Error: ${error.message}${getHelpText()}`);
     process.exit(1);
   }
 }

@@ -7,9 +7,11 @@ Thanks for wanting to contribute! This repo is a community resource for Claude C
 - [What We're Looking For](#what-were-looking-for)
 - [Quick Start](#quick-start)
 - [Contributing Skills](#contributing-skills)
+- [Skill Adaptation Policy](#skill-adaptation-policy)
 - [Contributing Agents](#contributing-agents)
 - [Contributing Hooks](#contributing-hooks)
 - [Contributing Commands](#contributing-commands)
+- [MCP and documentation (e.g. Context7)](#mcp-and-documentation-eg-context7)
 - [Cross-Harness and Translations](#cross-harness-and-translations)
 - [Pull Request Process](#pull-request-process)
 
@@ -72,6 +74,13 @@ git add . && git commit -m "feat: add my-skill" && git push -u origin feat/my-co
 
 Skills are knowledge modules that Claude Code loads based on context.
 
+> **Comprehensive Guide:** For detailed guidance on creating effective skills, see [Skill Development Guide](docs/SKILL-DEVELOPMENT-GUIDE.md). It covers:
+> - Skill architecture and categories
+> - Writing effective content with examples
+> - Best practices and common patterns
+> - Testing and validation
+> - Complete examples gallery
+
 ### Directory Structure
 
 ```
@@ -85,13 +94,17 @@ skills/
 ```markdown
 ---
 name: your-skill-name
-description: Brief description shown in skill list
+description: Brief description shown in skill list and used for auto-activation
 origin: ECC
 ---
 
 # Your Skill Title
 
 Brief overview of what this skill covers.
+
+## When to Activate
+
+Describe scenarios where Claude should use this skill. This is critical for auto-activation.
 
 ## Core Concepts
 
@@ -106,33 +119,65 @@ function example() {
 }
 \`\`\`
 
+## Anti-Patterns
+
+Show what NOT to do with examples.
+
 ## Best Practices
 
 - Actionable guidelines
 - Do's and don'ts
 - Common pitfalls to avoid
 
-## When to Use
+## Related Skills
 
-Describe scenarios where this skill applies.
+Link to complementary skills (e.g., `related-skill-1`, `related-skill-2`).
 ```
+
+### Skill Categories
+
+| Category | Purpose | Examples |
+|----------|---------|----------|
+| **Language Standards** | Idioms, conventions, best practices | `python-patterns`, `golang-patterns` |
+| **Framework Patterns** | Framework-specific guidance | `django-patterns`, `nextjs-patterns` |
+| **Workflow** | Step-by-step processes | `tdd-workflow`, `refactoring-workflow` |
+| **Domain Knowledge** | Specialized domains | `security-review`, `api-design` |
+| **Tool Integration** | Tool/library usage | `docker-patterns`, `supabase-patterns` |
+| **Template** | Project-specific skill templates | `docs/examples/project-guidelines-template.md` |
+
+### Skill Adaptation Policy
+
+If you are porting an idea from another repo, plugin, harness, or personal prompt pack, read [Skill Adaptation Policy](docs/skill-adaptation-policy.md) before opening the PR.
+
+Short version:
+
+- copy the underlying idea, not the external product identity
+- rename the skill when ECC materially changes or expands the surface
+- prefer ECC-native rules, skills, scripts, and MCPs over new default third-party dependencies
+- do not ship a skill whose main value is telling users to install an unvetted package
 
 ### Skill Checklist
 
-- [ ] Focused on one domain/technology
-- [ ] Includes practical code examples
-- [ ] Under 500 lines
+- [ ] Focused on one domain/technology (not too broad)
+- [ ] Includes "When to Activate" section for auto-activation
+- [ ] Includes practical, copy-pasteable code examples
+- [ ] Shows anti-patterns (what NOT to do)
+- [ ] Under 500 lines (800 max)
 - [ ] Uses clear section headers
 - [ ] Tested with Claude Code
+- [ ] Links to related skills
+- [ ] No sensitive data (API keys, tokens, paths)
 
 ### Example Skills
 
-| Skill | Purpose |
-|-------|---------|
-| `coding-standards/` | TypeScript/JavaScript patterns |
-| `frontend-patterns/` | React and Next.js best practices |
-| `backend-patterns/` | API and database patterns |
-| `security-review/` | Security checklist |
+| Skill | Category | Purpose |
+|-------|----------|---------|
+| `coding-standards/` | Language Standards | TypeScript/JavaScript patterns |
+| `frontend-patterns/` | Framework Patterns | React and Next.js best practices |
+| `backend-patterns/` | Framework Patterns | API and database patterns |
+| `security-review/` | Domain Knowledge | Security checklist |
+| `tdd-workflow/` | Workflow | Test-driven development process |
+| `docs/examples/project-guidelines-template.md` | Template | Project-specific skill template |
 
 ---
 
@@ -193,7 +238,7 @@ Output: [what you return]
 |-------|-------------|---------|
 | `name` | Lowercase, hyphenated | `code-reviewer` |
 | `description` | Used to decide when to invoke | Be specific! |
-| `tools` | Only what's needed | `Read, Write, Edit, Bash, Grep, Glob, WebFetch, Task` |
+| `tools` | Only what's needed | `Read, Write, Edit, Bash, Grep, Glob, WebFetch, Task`, or MCP tool names (e.g. `mcp__context7__resolve-library-id`, `mcp__context7__query-docs`) when the agent uses MCP |
 | `model` | Complexity level | `haiku` (simple), `sonnet` (coding), `opus` (complex) |
 
 ### Example Agents
@@ -346,6 +391,17 @@ What the user receives.
 | `code-review.md` | Review code changes |
 | `tdd.md` | TDD workflow |
 | `e2e.md` | E2E testing |
+
+---
+
+## MCP and documentation (e.g. Context7)
+
+Skills and agents can use **MCP (Model Context Protocol)** tools to pull in up-to-date data instead of relying only on training data. This is especially useful for documentation.
+
+- **Context7** is an MCP server that exposes `resolve-library-id` and `query-docs`. Use it when the user asks about libraries, frameworks, or APIs so answers reflect current docs and code examples.
+- When contributing **skills** that depend on live docs (e.g. setup, API usage), describe how to use the relevant MCP tools (e.g. resolve the library ID, then query docs) and point to the `documentation-lookup` skill or Context7 as the pattern.
+- When contributing **agents** that answer docs/API questions, include the Context7 MCP tool names (e.g. `mcp__context7__resolve-library-id`, `mcp__context7__query-docs`) in the agent's tools and document the resolve → query workflow.
+- **mcp-configs/mcp-servers.json** includes a Context7 entry; users enable it in their harness (e.g. Claude Code, Cursor) to use the documentation-lookup skill (in `skills/documentation-lookup/`) and the `/docs` command.
 
 ---
 

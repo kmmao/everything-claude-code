@@ -8,9 +8,23 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+const { getFallbackSessionRecordingPath } = require('../../scripts/lib/session-adapters/canonical-session');
+
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'session-inspect.js');
 
 function run(args = [], options = {}) {
+  const envOverrides = {
+    ...(options.env || {})
+  };
+
+  if (typeof envOverrides.HOME === 'string' && !('USERPROFILE' in envOverrides)) {
+    envOverrides.USERPROFILE = envOverrides.HOME;
+  }
+
+  if (typeof envOverrides.USERPROFILE === 'string' && !('HOME' in envOverrides)) {
+    envOverrides.HOME = envOverrides.USERPROFILE;
+  }
+
   try {
     const stdout = execFileSync('node', [SCRIPT, ...args], {
       encoding: 'utf8',
@@ -19,7 +33,7 @@ function run(args = [], options = {}) {
       cwd: options.cwd || process.cwd(),
       env: {
         ...process.env,
-        ...(options.env || {})
+        ...envOverrides
       }
     });
     return { code: 0, stdout, stderr: '' };
@@ -56,8 +70,18 @@ function runTests() {
     assert.ok(result.stdout.includes('Usage:'));
   })) passed++; else failed++;
 
+  if (test('lists registered adapters', () => {
+    const result = run(['--list-adapters']);
+    assert.strictEqual(result.code, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.ok(Array.isArray(payload.adapters));
+    assert.ok(payload.adapters.some(adapter => adapter.id === 'claude-history'));
+    assert.ok(payload.adapters.some(adapter => adapter.id === 'dmux-tmux'));
+  })) passed++; else failed++;
+
   if (test('prints canonical JSON for claude history targets', () => {
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-session-inspect-home-'));
+    const recordingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-session-inspect-recordings-'));
     const sessionsDir = path.join(homeDir, '.claude', 'sessions');
     fs.mkdirSync(sessionsDir, { recursive: true });
 
@@ -68,14 +92,47 @@ function runTests() {
       );
 
       const result = run(['claude:latest'], {
+        env: {
+          HOME: homeDir,
+          ECC_SESSION_RECORDING_DIR: recordingDir
+        }
+      });
+
+      assert.strictEqual(result.code, 0, result.stderr);
+      const payload = JSON.parse(result.stdout);
+      const recordingPath = getFallbackSessionRecordingPath(payload, { recordingDir });
+      const persisted = JSON.parse(fs.readFileSync(recordingPath, 'utf8'));
+      assert.strictEqual(payload.adapterId, 'claude-history');
+      assert.strictEqual(payload.session.kind, 'history');
+      assert.strictEqual(payload.workers[0].branch, 'feat/session-inspect');
+      assert.strictEqual(persisted.latest.adapterId, 'claude-history');
+      assert.strictEqual(persisted.history.length, 1);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      fs.rmSync(recordingDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('supports explicit target types for structured registry routing', () => {
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-session-inspect-home-'));
+    const sessionsDir = path.join(homeDir, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    try {
+      fs.writeFileSync(
+        path.join(sessionsDir, '2026-03-13-a1b2c3d4-session.tmp'),
+        '# Inspect Session\n\n**Branch:** feat/typed-inspect\n'
+      );
+
+      const result = run(['latest', '--target-type', 'claude-history'], {
         env: { HOME: homeDir }
       });
 
       assert.strictEqual(result.code, 0, result.stderr);
       const payload = JSON.parse(result.stdout);
       assert.strictEqual(payload.adapterId, 'claude-history');
-      assert.strictEqual(payload.session.kind, 'history');
-      assert.strictEqual(payload.workers[0].branch, 'feat/session-inspect');
+      assert.strictEqual(payload.session.sourceTarget.type, 'claude-history');
+      assert.strictEqual(payload.workers[0].branch, 'feat/typed-inspect');
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
@@ -106,6 +163,133 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
       fs.rmSync(outputDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('inspects skill health from recorded observations', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-session-inspect-skills-'));
+    const observationsDir = path.join(projectRoot, '.claude', 'ecc', 'skills');
+    fs.mkdirSync(observationsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(observationsDir, 'observations.jsonl'),
+      [
+        JSON.stringify({
+          schemaVersion: 'ecc.skill-observation.v1',
+          observationId: 'obs-1',
+          timestamp: '2026-03-14T12:00:00.000Z',
+          task: 'Review auth middleware',
+          skill: { id: 'security-review', path: 'skills/security-review/SKILL.md' },
+          outcome: { success: false, status: 'failure', error: 'missing csrf guidance', feedback: 'Need CSRF coverage' },
+          run: { variant: 'baseline', amendmentId: null, sessionId: 'sess-1' }
+        }),
+        JSON.stringify({
+          schemaVersion: 'ecc.skill-observation.v1',
+          observationId: 'obs-2',
+          timestamp: '2026-03-14T12:05:00.000Z',
+          task: 'Review auth middleware',
+          skill: { id: 'security-review', path: 'skills/security-review/SKILL.md' },
+          outcome: { success: false, status: 'failure', error: 'missing csrf guidance', feedback: null },
+          run: { variant: 'baseline', amendmentId: null, sessionId: 'sess-2' }
+        })
+      ].join('\n') + '\n'
+    );
+
+    try {
+      const result = run(['skills:health'], { cwd: projectRoot });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const payload = JSON.parse(result.stdout);
+      assert.strictEqual(payload.schemaVersion, 'ecc.skill-health.v1');
+      assert.ok(payload.skills.some(skill => skill.skill.id === 'security-review'));
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('proposes skill amendments through session-inspect', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-session-inspect-amend-'));
+    const observationsDir = path.join(projectRoot, '.claude', 'ecc', 'skills');
+    fs.mkdirSync(observationsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(observationsDir, 'observations.jsonl'),
+      [
+        JSON.stringify({
+          schemaVersion: 'ecc.skill-observation.v1',
+          observationId: 'obs-1',
+          timestamp: '2026-03-14T12:00:00.000Z',
+          task: 'Add rate limiting',
+          skill: { id: 'api-design', path: 'skills/api-design/SKILL.md' },
+          outcome: { success: false, status: 'failure', error: 'missing rate limiting guidance', feedback: 'Need rate limiting examples' },
+          run: { variant: 'baseline', amendmentId: null, sessionId: 'sess-1' }
+        })
+      ].join('\n') + '\n'
+    );
+
+    try {
+      const result = run(['skills:amendify', '--skill', 'api-design'], { cwd: projectRoot });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const payload = JSON.parse(result.stdout);
+      assert.strictEqual(payload.schemaVersion, 'ecc.skill-amendment-proposal.v1');
+      assert.strictEqual(payload.skill.id, 'api-design');
+      assert.ok(payload.patch.preview.includes('Failure-Driven Amendments'));
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('builds skill evaluation scaffolding through session-inspect', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-session-inspect-eval-'));
+    const observationsDir = path.join(projectRoot, '.claude', 'ecc', 'skills');
+    fs.mkdirSync(observationsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(observationsDir, 'observations.jsonl'),
+      [
+        JSON.stringify({
+          schemaVersion: 'ecc.skill-observation.v1',
+          observationId: 'obs-1',
+          timestamp: '2026-03-14T12:00:00.000Z',
+          task: 'Fix flaky login test',
+          skill: { id: 'e2e-testing', path: 'skills/e2e-testing/SKILL.md' },
+          outcome: { success: false, status: 'failure', error: null, feedback: null },
+          run: { variant: 'baseline', amendmentId: null, sessionId: 'sess-1' }
+        }),
+        JSON.stringify({
+          schemaVersion: 'ecc.skill-observation.v1',
+          observationId: 'obs-2',
+          timestamp: '2026-03-14T12:10:00.000Z',
+          task: 'Fix flaky checkout test',
+          skill: { id: 'e2e-testing', path: 'skills/e2e-testing/SKILL.md' },
+          outcome: { success: true, status: 'success', error: null, feedback: null },
+          run: { variant: 'baseline', amendmentId: null, sessionId: 'sess-2' }
+        }),
+        JSON.stringify({
+          schemaVersion: 'ecc.skill-observation.v1',
+          observationId: 'obs-3',
+          timestamp: '2026-03-14T12:20:00.000Z',
+          task: 'Fix flaky login test',
+          skill: { id: 'e2e-testing', path: 'skills/e2e-testing/SKILL.md' },
+          outcome: { success: true, status: 'success', error: null, feedback: null },
+          run: { variant: 'amended', amendmentId: 'amend-1', sessionId: 'sess-3' }
+        }),
+        JSON.stringify({
+          schemaVersion: 'ecc.skill-observation.v1',
+          observationId: 'obs-4',
+          timestamp: '2026-03-14T12:30:00.000Z',
+          task: 'Fix flaky checkout test',
+          skill: { id: 'e2e-testing', path: 'skills/e2e-testing/SKILL.md' },
+          outcome: { success: true, status: 'success', error: null, feedback: null },
+          run: { variant: 'amended', amendmentId: 'amend-1', sessionId: 'sess-4' }
+        })
+      ].join('\n') + '\n'
+    );
+
+    try {
+      const result = run(['skills:evaluate', '--skill', 'e2e-testing', '--amendment-id', 'amend-1'], { cwd: projectRoot });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const payload = JSON.parse(result.stdout);
+      assert.strictEqual(payload.schemaVersion, 'ecc.skill-evaluation.v1');
+      assert.strictEqual(payload.recommendation, 'promote-amendment');
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 

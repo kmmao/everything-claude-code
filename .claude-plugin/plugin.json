@@ -62,6 +62,8 @@
     "./agents/tdd-guide.md",
     "./agents/typescript-reviewer.md"
   ],
-  "skills": ["./skills/"],
-  "commands": ["./commands/"]
+  "skills": [
+    "./skills/"
+  ],
+  "commands": []
 }

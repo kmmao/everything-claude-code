@@ -84,6 +84,7 @@ This repo is the raw code only. The guides explain everything.
 
 ### v1.10.0 — Surface Refresh, Operator Workflows, and ECC 2.0 Alpha (Apr 2026)
 
+- **Dashboard GUI** — New Tkinter-based desktop application (`ecc_dashboard.py` or `npm run dashboard`) with dark/light theme toggle, font customization, and project logo in header and taskbar.
 - **Public surface synced to the live repo** — metadata, catalog counts, plugin manifests, and install-facing docs now match the actual OSS surface: 38 agents, 156 skills, and 72 legacy command shims.
 - **Operator and outbound workflow expansion** — `brand-voice`, `social-graph-ranker`, `connections-optimizer`, `customer-billing-ops`, `ecc-tools-cost-audit`, `google-workspace-ops`, `project-flow-ops`, and `workspace-surface-audit` round out the operator lane.
 - **Media and launch tooling** — `manim-video`, `remotion-video-creation`, and upgraded social publishing surfaces make technical explainers and launch content part of the same system.
@@ -173,12 +174,24 @@ Get up and running in under 2 minutes:
 /plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # Install plugin
-/plugin install ecc@ecc
+/plugin install everything-claude-code@everything-claude-code
 ```
+
+### Naming + Migration Note
+
+ECC now has three public identifiers, and they are not interchangeable:
+
+- GitHub source repo: `affaan-m/everything-claude-code`
+- Claude marketplace/plugin identifier: `everything-claude-code@everything-claude-code`
+- npm package: `ecc-universal`
+
+This is intentional. Anthropic marketplace/plugin installs are keyed by a canonical plugin identifier, so ECC standardized on `everything-claude-code@everything-claude-code` to keep the listing name, `/plugin install`, `/plugin list`, and repo docs aligned to one public install surface. Older posts may still show the old short-form nickname; that shorthand is deprecated. Separately, the npm package stayed on `ecc-universal`, so npm installs and marketplace installs intentionally use different names.
 
 ### Step 2: Install Rules (Required)
 
 > WARNING: **Important:** Claude Code plugins cannot distribute `rules` automatically. Install them manually:
+>
+> If your local Claude setup was wiped or reset, that does not mean you need to repurchase ECC. Start with `ecc list-installed`, then run `ecc doctor` and `ecc repair` before reinstalling anything. That usually restores ECC-managed files without rebuilding your setup. If the problem is account or marketplace access for ECC Tools, handle billing/account recovery separately.
 
 > If your local Claude setup was wiped or reset, that does not mean you need to repurchase ECC. Start with `ecc list-installed`, then run `ecc doctor` and `ecc repair` before reinstalling anything. That usually restores ECC-managed files without rebuilding your setup. If the problem is account or marketplace access for ECC Tools, handle billing/account recovery separately.
 
@@ -235,10 +248,27 @@ For manual install instructions see the README in the `rules/` folder. When copy
 # /plan "Add user authentication"
 
 # Check available commands
-/plugin list ecc@ecc
+/plugin list everything-claude-code@everything-claude-code
 ```
 
-**That's it!** You now have access to 47 agents, 181 skills, and 79 legacy command shims.
+**That's it!** You now have access to 48 agents, 183 skills, and 79 legacy command shims.
+
+### Dashboard GUI
+
+Launch the desktop dashboard to visually explore ECC components:
+
+```bash
+npm run dashboard
+# or
+python3 ./ecc_dashboard.py
+```
+
+**Features:**
+- Tabbed interface: Agents, Skills, Commands, Rules, Settings
+- Dark/Light theme toggle
+- Font customization (family & size)
+- Project logo in header and taskbar
+- Search and filter across all components
 
 ### Multi-model commands require additional setup
 
@@ -500,6 +530,12 @@ everything-claude-code/
 |-- mcp-configs/      # MCP server configurations
 |   |-- mcp-servers.json    # GitHub, Supabase, Vercel, Railway, etc.
 |
+|-- ecc_dashboard.py  # Desktop GUI dashboard (Tkinter)
+|
+|-- assets/           # Assets for dashboard
+|   |-- images/
+|       |-- ecc-logo.png
+|
 |-- marketplace.json  # Self-hosted marketplace config (for /plugin marketplace add)
 ```
 
@@ -624,7 +660,7 @@ The easiest way to use this repo - install as a Claude Code plugin:
 /plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # Install the plugin
-/plugin install ecc@ecc
+/plugin install everything-claude-code@everything-claude-code
 ```
 
 Or add directly to your `~/.claude/settings.json`:
@@ -640,7 +676,7 @@ Or add directly to your `~/.claude/settings.json`:
     }
   },
   "enabledPlugins": {
-    "ecc@ecc": true
+    "everything-claude-code@everything-claude-code": true
   }
 }
 ```
@@ -703,9 +739,27 @@ mkdir -p ~/.claude/commands
 cp everything-claude-code/commands/*.md ~/.claude/commands/
 ```
 
-#### Add hooks to settings.json
+#### Install hooks
 
-Copy the hooks from `hooks/hooks.json` to your `~/.claude/settings.json`.
+Do not copy the raw repo `hooks/hooks.json` into `~/.claude/settings.json` or `~/.claude/hooks/hooks.json`. That file is plugin/repo-oriented and is meant to be installed through the ECC installer or loaded as a plugin, so raw copying is not a supported manual install path.
+
+Use the installer to install only the Claude hook runtime so command paths are rewritten correctly:
+
+```bash
+# macOS / Linux
+bash ./install.sh --target claude --modules hooks-runtime
+```
+
+```powershell
+# Windows PowerShell
+pwsh -File .\install.ps1 --target claude --modules hooks-runtime
+```
+
+That writes resolved hooks to `~/.claude/hooks/hooks.json` and leaves any existing `~/.claude/settings.json` untouched.
+
+If you installed ECC via `/plugin install`, do not copy those hooks into `settings.json`. Claude Code v2.1+ already auto-loads plugin `hooks/hooks.json`, and duplicating them in `settings.json` causes duplicate execution and cross-platform hook conflicts.
+
+Windows note: the Claude config directory is `%USERPROFILE%\\.claude`, not `~/claude`.
 
 #### Configure MCPs
 
@@ -840,7 +894,7 @@ Slash forms below are shown because they are still the fastest familiar entrypoi
 <summary><b>How do I check which agents/commands are installed?</b></summary>
 
 ```bash
-/plugin list ecc@ecc
+/plugin list everything-claude-code@everything-claude-code
 ```
 
 This shows all available agents, commands, and skills from the plugin.
@@ -970,6 +1024,14 @@ Please contribute! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - DevOps agents (Kubernetes, Terraform, AWS, Docker)
 - Testing strategies (different frameworks, visual regression)
 - Domain-specific knowledge (ML, data engineering, mobile)
+
+### Community Ecosystem Notes
+
+These are not bundled with ECC and are not audited by this repo, but they are worth knowing about if you are exploring the broader Claude Code skills ecosystem:
+
+- [claude-seo](https://github.com/AgriciDaniel/claude-seo) — SEO-focused skill and agent collection
+- [claude-ads](https://github.com/AgriciDaniel/claude-ads) — Ad-audit and paid-growth workflow collection
+- [claude-cybersecurity](https://github.com/AgriciDaniel/claude-cybersecurity) — Security-oriented skill and agent collection
 
 ---
 
@@ -1155,9 +1217,9 @@ The configuration is automatically detected from `.opencode/opencode.json`.
 
 | Feature | Claude Code | OpenCode | Status |
 |---------|-------------|----------|--------|
-| Agents | PASS: 47 agents | PASS: 12 agents | **Claude Code leads** |
+| Agents | PASS: 48 agents | PASS: 12 agents | **Claude Code leads** |
 | Commands | PASS: 79 commands | PASS: 31 commands | **Claude Code leads** |
-| Skills | PASS: 181 skills | PASS: 37 skills | **Claude Code leads** |
+| Skills | PASS: 183 skills | PASS: 37 skills | **Claude Code leads** |
 | Hooks | PASS: 8 event types | PASS: 11 events | **OpenCode has more!** |
 | Rules | PASS: 29 rules | PASS: 13 instructions | **Claude Code leads** |
 | MCP Servers | PASS: 14 servers | PASS: Full | **Full parity** |
@@ -1264,9 +1326,9 @@ ECC is the **first plugin to maximize every major AI coding tool**. Here's how e
 
 | Feature | Claude Code | Cursor IDE | Codex CLI | OpenCode |
 |---------|------------|------------|-----------|----------|
-| **Agents** | 47 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
+| **Agents** | 48 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
 | **Commands** | 79 | Shared | Instruction-based | 31 |
-| **Skills** | 181 | Shared | 10 (native format) | 37 |
+| **Skills** | 183 | Shared | 10 (native format) | 37 |
 | **Hook Events** | 8 types | 15 types | None yet | 11 types |
 | **Hook Scripts** | 20+ scripts | 16 scripts (DRY adapter) | N/A | Plugin hooks |
 | **Rules** | 34 (common + lang) | 34 (YAML frontmatter) | Instruction-based | 13 instructions |

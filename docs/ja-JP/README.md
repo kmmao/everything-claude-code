@@ -110,7 +110,7 @@
 /plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # プラグインをインストール
-/plugin install ecc@ecc
+/plugin install everything-claude-code
 ```
 
 ### ステップ2：ルールをインストール（必須）
@@ -140,7 +140,7 @@ cp -r everything-claude-code/rules/golang/* ~/.claude/rules/
 # /plan "ユーザー認証を追加"
 
 # 利用可能なコマンドを確認
-/plugin list ecc@ecc
+/plugin list everything-claude-code@everything-claude-code
 ```
 
 **完了です！** これで13のエージェント、43のスキル、31のコマンドにアクセスできます。
@@ -427,7 +427,7 @@ Duplicate hook file detected: ./hooks/hooks.json is already resolved to a loaded
 /plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # プラグインをインストール
-/plugin install ecc@ecc
+/plugin install everything-claude-code
 ```
 
 または、`~/.claude/settings.json` に直接追加：
@@ -443,7 +443,7 @@ Duplicate hook file detected: ./hooks/hooks.json is already resolved to a loaded
     }
   },
   "enabledPlugins": {
-    "ecc@ecc": true
+    "everything-claude-code@everything-claude-code": true
   }
 }
 ```
@@ -497,7 +497,9 @@ cp -r everything-claude-code/skills/* ~/.claude/skills/
 
 #### settings.json にフックを追加
 
-`hooks/hooks.json` のフックを `~/.claude/settings.json` にコピーします。
+手動インストール時のみ、`hooks/hooks.json` のフックを `~/.claude/settings.json` にコピーします。
+
+`/plugin install` で ECC を導入した場合は、これらのフックを `settings.json` にコピーしないでください。Claude Code v2.1+ はプラグインの `hooks/hooks.json` を自動読み込みするため、二重登録すると重複実行や `${CLAUDE_PLUGIN_ROOT}` の解決失敗が発生します。
 
 #### MCP を設定
 

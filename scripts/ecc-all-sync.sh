@@ -169,6 +169,13 @@ if $MODE_CODEX && $HAS_CODEX; then
     bash scripts/sync-ecc-to-codex.sh
   fi
 
+  yellow "==> 设置 PATH 命令别名"
+  BIN_DIR="${HOME}/.local/bin"
+  run mkdir -p "$BIN_DIR"
+  run ln -sf "$REPO/scripts/sync-ecc-to-codex.sh" "$BIN_DIR/ecc-sync-codex"
+  run ln -sf "$REPO/scripts/codex/install-global-git-hooks.sh" "$BIN_DIR/ecc-install-git-hooks"
+  run ln -sf "$REPO/scripts/codex/check-codex-global-state.sh" "$BIN_DIR/ecc-check-codex"
+
   yellow "==> 健康检查"
   run bash scripts/codex/check-codex-global-state.sh 2>/dev/null || yellow "⚠️  健康检查有警告（见上方输出）"
 

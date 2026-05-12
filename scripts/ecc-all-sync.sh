@@ -147,8 +147,11 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
     run ./install.sh --profile full
   fi
 
-  yellow "==> 清理 ~/.claude/rules/zh"
-  run rm -rf ~/.claude/rules/zh
+  yellow "==> 清理重复 rules（ecc/ 子目录已包含完整内容，顶层为旧遗留）"
+  for d in common typescript web python golang swift kotlin java rust perl php cpp csharp dart angular arkts fsharp; do
+    [ -d "$HOME/.claude/rules/$d" ] && [ -d "$HOME/.claude/rules/ecc/$d" ] && run rm -rf "$HOME/.claude/rules/$d" && yellow "   清除重复 rules/$d"
+  done
+  run rm -rf "$HOME/.claude/rules/zh" "$HOME/.claude/rules/ecc/zh"
 
   # 同步 plugin.json 到所有 marketplace 副本
   for target in "$PLUGIN_COPY" $(find "$HOME/.claude/plugins/cache/everything-claude-code" -name "plugin.json" -path "*/.claude-plugin/*" 2>/dev/null); do

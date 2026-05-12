@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# DEPRECATED: 请改用 scripts/ecc-all-sync.sh（同时支持 Claude Code + Codex CLI）
 # ECC 日常同步脚本 — 拉上游 → install.sh → 清 zh/ 重复
 #
 # 用法（从仓库根目录）:
@@ -17,6 +18,12 @@ PLUGIN_COPY="$HOME/.claude/plugins/marketplaces/everything-claude-code/.claude-p
 CONFIG="$HOME/ecc-install.json"
 
 cd "$REPO"
+
+# 锁文件经常有本地改动，merge 前先清理避免阻塞
+if git diff --name-only | grep -qE '(package-lock\.json|yarn\.lock)$'; then
+  echo "==> 清理锁文件本地改动（不影响合并结果）"
+  git checkout -- package-lock.json yarn.lock 2>/dev/null || true
+fi
 
 echo "==> git fetch upstream"
 git fetch upstream

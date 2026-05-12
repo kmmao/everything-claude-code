@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# DEPRECATED: 请改用 scripts/ecc-all-sync.sh --full（同时支持 Claude Code + Codex CLI）
 # ECC 完全重装脚本 — 从 fork 装（全自动，不用切 Claude Code 手动 /plugin）
 #
 # 用法（从仓库根目录）:

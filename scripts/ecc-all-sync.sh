@@ -116,6 +116,12 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
     fi
     [ -d "$MARKETPLACE_DIR" ] && run rm -rf "$MARKETPLACE_DIR"
 
+    yellow "==> 清理旧安装目录（确保无残留）"
+    for d in "$HOME/.claude/rules/ecc" "$HOME/.claude/skills/ecc" "$HOME/.claude/agents" "$HOME/.claude/hooks"; do
+      [ -d "$d" ] && run rm -rf "$d" && yellow "   清除 $d"
+    done
+    [ -f "$HOME/.claude/ecc/install-state.json" ] && run rm -f "$HOME/.claude/ecc/install-state.json"
+
     yellow "==> 刷新 marketplace"
     current_repo=$(claude plugin marketplace list --json 2>/dev/null \
       | jq -r --arg n "$MARKETPLACE_NAME" '.[] | select(.name==$n) | .repo // ""')

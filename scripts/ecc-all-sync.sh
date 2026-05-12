@@ -193,6 +193,18 @@ if $MODE_CODEX && $HAS_CODEX; then
     bash scripts/sync-ecc-to-codex.sh
   fi
 
+  yellow "==> 清理 Codex 冗余"
+  CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+  # ~/.codex/skills/ 与 ~/.agents/skills/ 重复（Codex 实际读 ~/.agents/skills/）
+  if [ -d "$CODEX_HOME/skills" ] && [ -d "${AGENTS_HOME:-$HOME/.agents}/skills" ]; then
+    run rm -rf "$CODEX_HOME/skills"
+    yellow "   清除 ~/.codex/skills/（Codex 用 ~/.agents/skills/）"
+  fi
+  # 清理备份和副本残留
+  for f in "$CODEX_HOME"/config.toml.bak-* "$CODEX_HOME"/config_副本.toml "$CODEX_HOME"/auth_副本.json "$CODEX_HOME"/.codex-global-state.json.bak; do
+    [ -f "$f" ] && run rm -f "$f" && yellow "   清除 $(basename "$f")"
+  done
+
   yellow "==> 设置 PATH 命令别名"
   BIN_DIR="${HOME}/.local/bin"
   run mkdir -p "$BIN_DIR"

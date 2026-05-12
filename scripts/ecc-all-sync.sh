@@ -147,11 +147,26 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
     run ./install.sh --profile full
   fi
 
-  yellow "==> 清理重复 rules（ecc/ 子目录已包含完整内容，顶层为旧遗留）"
+  yellow "==> 清理重复内容（install.sh 装到 ecc/ 子目录 + plugin 已包含完整内容）"
+  # rules: 顶层语言目录与 ecc/ 重复
   for d in common typescript web python golang swift kotlin java rust perl php cpp csharp dart angular arkts fsharp; do
     [ -d "$HOME/.claude/rules/$d" ] && [ -d "$HOME/.claude/rules/ecc/$d" ] && run rm -rf "$HOME/.claude/rules/$d" && yellow "   清除重复 rules/$d"
   done
   run rm -rf "$HOME/.claude/rules/zh" "$HOME/.claude/rules/ecc/zh"
+  # skills: 顶层 skill 与 ecc/ 或 plugin 重复
+  PLUGIN_SKILLS="$MARKETPLACE_DIR/skills"
+  for d in "$HOME/.claude/skills"/*/; do
+    name=$(basename "$d")
+    [ "$name" = "ecc" ] || [ "$name" = "learned" ] && continue
+    if [ -d "$HOME/.claude/skills/ecc/$name" ] || [ -d "$PLUGIN_SKILLS/$name" ]; then
+      run rm -rf "$d" && yellow "   清除重复 skills/$name"
+    fi
+  done
+  # agents: install.sh 副本与 plugin 完全一致
+  if [ -d "$MARKETPLACE_DIR/agents" ] && [ -d "$HOME/.claude/agents" ]; then
+    run rm -rf "$HOME/.claude/agents"
+    yellow "   清除重复 agents/（plugin 已包含）"
+  fi
 
   # 同步 plugin.json 到所有 marketplace 副本
   for target in "$PLUGIN_COPY" $(find "$HOME/.claude/plugins/cache/everything-claude-code" -name "plugin.json" -path "*/.claude-plugin/*" 2>/dev/null); do

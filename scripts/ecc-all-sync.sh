@@ -130,17 +130,39 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
   fi
 
   # 补装 manifest 遗漏的 skills（仓库 skills/ 有但 module 未收录的）
+  # 排除 ecc-install.json 里 exclude 对应模块的 skill
   yellow "==> 补装 manifest 未收录的 skills"
   INSTALLED_SKILLS_DIR="$HOME/.claude/skills/ecc"
   REPO_SKILLS_DIR="$REPO/skills"
   extra_count=0
+  # 构建排除 skill 列表（从 exclude 的模块中提取 skill 路径）
+  EXCLUDED_SKILLS=""
+  if [ -n "${CONFIG:-}" ] && [ -f "$CONFIG" ]; then
+    EXCLUDE_COMPS=$(jq -r '.exclude // [] | .[]' "$CONFIG" 2>/dev/null || true)
+    if [ -n "$EXCLUDE_COMPS" ]; then
+      for comp in $EXCLUDE_COMPS; do
+        # 查找 component 对应的 module IDs
+        mod_ids=$(jq -r --arg c "$comp" '.components[] | select(.id==$c) | .modules[]' "$REPO/manifests/install-components.json" 2>/dev/null || true)
+        for mid in $mod_ids; do
+          skills=$(jq -r --arg m "$mid" '.modules[] | select(.id==$m) | .paths[]' "$REPO/manifests/install-modules.json" 2>/dev/null | grep "^skills/" | sed 's|skills/||' || true)
+          EXCLUDED_SKILLS="$EXCLUDED_SKILLS $skills"
+        done
+      done
+    fi
+  fi
   if [ -d "$REPO_SKILLS_DIR" ] && [ -d "$INSTALLED_SKILLS_DIR" ]; then
     for skill_dir in "$REPO_SKILLS_DIR"/*/; do
       skill_name=$(basename "$skill_dir")
-      if [ ! -d "$INSTALLED_SKILLS_DIR/$skill_name" ] && [ -f "$skill_dir/SKILL.md" ]; then
-        run cp -r "$skill_dir" "$INSTALLED_SKILLS_DIR/$skill_name"
-        extra_count=$((extra_count + 1))
+      # 跳过已安装的
+      [ -d "$INSTALLED_SKILLS_DIR/$skill_name" ] && continue
+      # 跳过无 SKILL.md 的
+      [ ! -f "$skill_dir/SKILL.md" ] && continue
+      # 跳过被 exclude 的
+      if echo "$EXCLUDED_SKILLS" | grep -qw "$skill_name"; then
+        continue
       fi
+      run cp -r "$skill_dir" "$INSTALLED_SKILLS_DIR/$skill_name"
+      extra_count=$((extra_count + 1))
     done
     [ $extra_count -gt 0 ] && yellow "   补装了 $extra_count 个遗漏 skill" || yellow "   无遗漏（全部已安装）"
   fi

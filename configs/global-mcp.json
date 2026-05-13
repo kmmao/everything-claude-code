@@ -35,6 +35,10 @@
         "-y",
         "@modelcontextprotocol/server-memory@2026.1.26"
       ]
+    },
+    "exa": {
+      "type": "http",
+      "url": "https://mcp.exa.ai/mcp"
     }
   }
 }

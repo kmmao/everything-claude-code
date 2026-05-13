@@ -230,13 +230,14 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
     fi
   fi
 
-  # sync global MCP config
-  GLOBAL_MCP="$HOME/.claude/.mcp.json"
+  # sync global MCP config → settings.json mcpServers
+  SETTINGS="$HOME/.claude/settings.json"
   REPO_MCP="$REPO/configs/global-mcp.json"
-  if [ -f "$REPO_MCP" ]; then
-    if [ ! -f "$GLOBAL_MCP" ] || ! diff -q "$REPO_MCP" "$GLOBAL_MCP" >/dev/null 2>&1; then
-      run cp "$REPO_MCP" "$GLOBAL_MCP"
-      yellow "==> 同步全局 MCP 配置 → ~/.claude/.mcp.json"
+  if [ -f "$REPO_MCP" ] && [ -f "$SETTINGS" ]; then
+    if ! jq -e '.mcpServers' "$SETTINGS" >/dev/null 2>&1; then
+      # settings.json 没有 mcpServers，从 global-mcp.json 合并进去
+      run jq --slurpfile mcp "$REPO_MCP" '.mcpServers = $mcp[0].mcpServers' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+      yellow "==> 同步全局 MCP 配置 → settings.json mcpServers"
     fi
   fi
 

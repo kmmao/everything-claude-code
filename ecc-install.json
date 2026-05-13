@@ -12,5 +12,8 @@
     "capability:operators",
     "capability:orchestration",
     "lang:swift"
-  ]
+  ],
+  "options": {
+    "keep_rules": ["common", "typescript", "web", "python"]
+  }
 }

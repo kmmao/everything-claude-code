@@ -145,13 +145,27 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
     [ $extra_count -gt 0 ] && yellow "   补装了 $extra_count 个遗漏 skill" || yellow "   无遗漏（全部已安装）"
   fi
 
-  # 清理旧遗留
+  # 清理旧遗留 + 精简 rules
   yellow "==> 清理旧遗留"
   # rules: 顶层语言目录与 ecc/ 重复
   for d in common typescript web python golang swift kotlin java rust perl php cpp csharp dart angular arkts fsharp; do
     [ -d "$HOME/.claude/rules/$d" ] && [ -d "$HOME/.claude/rules/ecc/$d" ] && run rm -rf "$HOME/.claude/rules/$d" && yellow "   清除重复 rules/$d"
   done
   run rm -rf "$HOME/.claude/rules/zh" "$HOME/.claude/rules/ecc/zh"
+
+  # rules: prune language dirs not in keep_rules (saves always-on tokens)
+  if [ -n "${CONFIG:-}" ] && [ -f "$CONFIG" ]; then
+    KEEP_RULES=$(jq -r '.options.keep_rules // [] | .[]' "$CONFIG" 2>/dev/null || true)
+    if [ -n "$KEEP_RULES" ]; then
+      yellow "==> prune rules (keep: $(echo $KEEP_RULES | tr '\n' ' '))"
+      for d in "$HOME/.claude/rules/ecc"/*/; do
+        rname=$(basename "$d")
+        if ! echo "$KEEP_RULES" | grep -qx "$rname"; then
+          run rm -rf "$d" && yellow "   rm rules/ecc/$rname"
+        fi
+      done
+    fi
+  fi
   # skills: 顶层 skill 与 ecc/ 重复
   for d in "$HOME/.claude/skills"/*/; do
     name=$(basename "$d")

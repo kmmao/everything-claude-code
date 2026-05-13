@@ -212,8 +212,16 @@ fi
 if $MODE_CODEX && $HAS_CODEX; then
   step "Phase 3: Codex CLI 同步"
 
-  yellow "==> install.sh --target codex --profile full"
-  run ./install.sh --target codex --profile full
+  yellow "==> install.sh --target codex"
+  if [ -n "${CONFIG:-}" ] && [ -f "$CONFIG" ]; then
+    # 复用 ecc-install.json 但改 target 为 codex
+    CODEX_CONFIG=$(mktemp)
+    jq '.target = "codex"' "$CONFIG" > "$CODEX_CONFIG"
+    run ./install.sh --config "$CODEX_CONFIG"
+    rm -f "$CODEX_CONFIG"
+  else
+    run ./install.sh --target codex --profile full
+  fi
 
   yellow "==> sync-ecc-to-codex.sh"
   if $DRY_RUN; then

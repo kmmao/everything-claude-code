@@ -190,10 +190,10 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
     # delete specific rule files
     EXCLUDE_RULES_FILES=$(jq -r '.options.exclude_rules_files // [] | .[]' "$CONFIG" 2>/dev/null || true)
     if [ -n "$EXCLUDE_RULES_FILES" ]; then
-      echo "$EXCLUDE_RULES_FILES" | while read -r rf; do
+      while read -r rf; do
         target="$HOME/.claude/rules/ecc/$rf"
         [ -f "$target" ] && run rm -f "$target" && yellow "   rm rules/ecc/$rf"
-      done
+      done <<< "$EXCLUDE_RULES_FILES"
     fi
   fi
   # skills: 顶层 skill 与 ecc/ 重复
@@ -239,6 +239,35 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
       run jq --slurpfile mcp "$REPO_MCP" '.mcpServers = $mcp[0].mcpServers' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
       yellow "==> 同步全局 MCP 配置 → settings.json mcpServers"
     fi
+  fi
+
+  # sync strategic-compact & pre-compact hooks → settings.json hooks.PreToolUse
+  if [ -f "$SETTINGS" ]; then
+    yellow "==> 确保 strategic-compact / pre-compact hooks 存在"
+    HOOKS_CHANGED=false
+
+    # suggest-compact on Edit
+    if ! jq -e '.hooks.PreToolUse[]? | select(.matcher=="Edit") | .hooks[]? | select(.command | test("suggest-compact"))' "$SETTINGS" >/dev/null 2>&1; then
+      run jq '.hooks.PreToolUse += [{"matcher":"Edit","hooks":[{"type":"command","command":"node \"'$HOME'/.claude/scripts/hooks/suggest-compact.js\""}]}]' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+      yellow "   + Edit → suggest-compact.js"
+      HOOKS_CHANGED=true
+    fi
+
+    # suggest-compact on Write
+    if ! jq -e '.hooks.PreToolUse[]? | select(.matcher=="Write") | .hooks[]? | select(.command | test("suggest-compact"))' "$SETTINGS" >/dev/null 2>&1; then
+      run jq '.hooks.PreToolUse += [{"matcher":"Write","hooks":[{"type":"command","command":"node \"'$HOME'/.claude/scripts/hooks/suggest-compact.js\""}]}]' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+      yellow "   + Write → suggest-compact.js"
+      HOOKS_CHANGED=true
+    fi
+
+    # pre-compact on Compact
+    if ! jq -e '.hooks.PreToolUse[]? | select(.matcher=="Compact") | .hooks[]? | select(.command | test("pre-compact"))' "$SETTINGS" >/dev/null 2>&1; then
+      run jq '.hooks.PreToolUse += [{"matcher":"Compact","hooks":[{"type":"command","command":"node \"'$HOME'/.claude/scripts/hooks/pre-compact.js\""}]}]' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+      yellow "   + Compact → pre-compact.js"
+      HOOKS_CHANGED=true
+    fi
+
+    $HOOKS_CHANGED || yellow "   已存在，无需更新"
   fi
 
   green "✓ Claude Code 同步完成"

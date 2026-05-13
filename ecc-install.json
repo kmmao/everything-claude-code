@@ -23,7 +23,8 @@
       "post:observe:continuous-learning",
       "post:mcp-health-check",
       "stop:desktop-notify",
-      "stop:evaluate-session"
+      "stop:evaluate-session",
+      "post:session-activity-tracker"
     ]
   }
 }

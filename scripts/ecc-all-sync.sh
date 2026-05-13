@@ -205,6 +205,31 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
     fi
   done
 
+  # hooks: remove excluded hooks by id from hooks.json
+  HOOKS_JSON="$HOME/.claude/hooks/hooks.json"
+  if [ -n "${CONFIG:-}" ] && [ -f "$CONFIG" ] && [ -f "$HOOKS_JSON" ]; then
+    EXCLUDE_HOOKS=$(jq -r '.options.exclude_hooks // [] | .[]' "$CONFIG" 2>/dev/null || true)
+    if [ -n "$EXCLUDE_HOOKS" ]; then
+      yellow "==> prune hooks (disable $(echo "$EXCLUDE_HOOKS" | wc -l | tr -d ' ') hooks)"
+      # build jq filter to remove hooks by id
+      JQ_FILTER='.hooks |= (to_entries | map(.value |= [.[] | select(.id as $id | ['
+      first=true
+      for hid in $EXCLUDE_HOOKS; do
+        $first || JQ_FILTER="$JQ_FILTER,"
+        JQ_FILTER="$JQ_FILTER\"$hid\""
+        first=false
+      done
+      JQ_FILTER="$JQ_FILTER] | index(\$id) | not)]) | from_entries)"
+      if ! $DRY_RUN; then
+        tmp=$(mktemp)
+        jq "$JQ_FILTER" "$HOOKS_JSON" > "$tmp" && mv "$tmp" "$HOOKS_JSON"
+      fi
+      for hid in $EXCLUDE_HOOKS; do
+        yellow "   disabled: $hid"
+      done
+    fi
+  fi
+
   green "✓ Claude Code 同步完成"
 fi
 

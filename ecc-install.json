@@ -14,6 +14,16 @@
   ],
   "options": {
     "keep_rules": ["common", "typescript", "web", "python", "java"],
-    "exclude_rules_files": ["web/hooks.md"]
+    "exclude_rules_files": ["web/hooks.md"],
+    "exclude_hooks": [
+      "pre:governance-capture",
+      "pre:observe:continuous-learning",
+      "post:edit:design-quality-check",
+      "post:governance-capture",
+      "post:observe:continuous-learning",
+      "post:mcp-health-check",
+      "stop:desktop-notify",
+      "stop:evaluate-session"
+    ]
   }
 }

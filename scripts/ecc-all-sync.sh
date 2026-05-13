@@ -56,7 +56,15 @@ MARKETPLACE_NAME="everything-claude-code"
 MARKETPLACE_REPO="kmmao/everything-claude-code"
 MARKETPLACE_DIR="$HOME/.claude/plugins/marketplaces/${MARKETPLACE_NAME}"
 PLUGIN_COPY="$MARKETPLACE_DIR/.claude-plugin/plugin.json"
-CONFIG="$HOME/ecc-install.json"
+# 配置优先级：项目 .claude/ > 全局 ~/
+PROJECT_CONFIG=""
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "$CLAUDE_PROJECT_DIR/.claude/ecc-install.json" ]; then
+  PROJECT_CONFIG="$CLAUDE_PROJECT_DIR/.claude/ecc-install.json"
+elif [ -f ".claude/ecc-install.json" ]; then
+  PROJECT_CONFIG=".claude/ecc-install.json"
+fi
+GLOBAL_CONFIG="$HOME/ecc-install.json"
+CONFIG="${PROJECT_CONFIG:-$GLOBAL_CONFIG}"
 
 # ─── Phase 0: 前置检查 ──────────────────────────
 step "Phase 0: 前置检查"
@@ -142,8 +150,10 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
 
   yellow "==> install.sh"
   if [ -f "$CONFIG" ]; then
+    yellow "    配置: $CONFIG"
     run ./install.sh --config "$CONFIG"
   else
+    yellow "    无配置文件，使用 --profile full"
     run ./install.sh --profile full
   fi
 

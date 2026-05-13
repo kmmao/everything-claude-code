@@ -10,7 +10,18 @@ The fixture set lives in
 It started with the May 2026 stale-PR cleanup and salvage lane because that
 lane has real inputs, real accepted work, and real rejected work. The corpus now
 also includes a billing/Marketplace readiness scenario so launch copy cannot
-treat dry-run release evidence or roadmap intent as live billing state.
+treat dry-run release evidence or roadmap intent as live billing state. A
+CI-failure diagnosis scenario adds the log-first workflow needed before an
+agent proposes fixes for red checks. A harness-config quality scenario keeps
+MCP, plugin, hook, command, agent, and adapter recommendations tied to the
+adapter matrix before they mutate setup guidance. An AgentShield policy
+exception scenario gates security exceptions on SARIF/report evidence, owner
+fields, expiry state, and remediation-versus-exception decisions. A
+skill-quality evidence scenario requires observed failure or feedback evidence,
+working examples, reference-set gaps, and validation commands before a skill
+amendment can be promoted. A deep-analyzer evidence scenario requires analyzer
+corpus cases, expected-output comparisons, and risk-taxonomy proof before
+repository or commit-analysis behavior can change.
 
 ## Reference Pressure
 
@@ -96,6 +107,20 @@ Current corpus:
   maintainer-owned branches with attribution and validation.
 - `billing-marketplace-readiness`: verifies billing, App, and Marketplace
   launch claims before public copy says they are live.
+- `ci-failure-diagnosis`: requires failed-job logs, changed-file scope, and a
+  named regression command before a CI fix playbook can be promoted.
+- `harness-config-quality`: requires adapter state, install/onramp path,
+  verification commands, risk notes, and config-preservation behavior before a
+  harness setup recommendation can be promoted.
+- `agentshield-policy-exception`: requires AgentShield SARIF or report
+  evidence, policy-pack source, owner/ticket/scope/expiry fields, and expired
+  exception enforcement before a policy exception can be promoted.
+- `skill-quality-evidence`: requires focused skill scope, observed failure or
+  user-feedback evidence, examples/reference-set coverage, validation commands,
+  and publication safety before a skill amendment can be promoted.
+- `deep-analyzer-evidence`: requires maintained analyzer corpus cases,
+  expected-output comparisons, representative repository/commit histories, and
+  regression commands before deep-analysis behavior can be promoted.
 
 ## ECC Tools Mapping
 
@@ -127,8 +152,7 @@ A candidate can be promoted only when:
 
 ## Next Expansion
 
-The next evaluator/RAG corpus should add:
-
-- a CI-failure diagnosis scenario with captured logs and a known fix;
-- a harness-config quality scenario covering MCP/plugin/hook drift;
-- an AgentShield policy exception scenario with SARIF and report evidence.
+The local evaluator/RAG corpus now covers the current evidence buckets. Future
+work should consume these fixtures from ECC Tools before adding hosted
+retrieval, vector storage, model-backed judging, or automated check-run
+promotion.

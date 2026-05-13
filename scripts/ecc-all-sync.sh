@@ -54,7 +54,14 @@ run() {
   fi
 }
 
-CONFIG="$HOME/ecc-install.json"
+# 配置文件优先级：仓库内 > 用户目录
+if [ -f "$REPO/ecc-install.json" ]; then
+  CONFIG="$REPO/ecc-install.json"
+elif [ -f "$HOME/ecc-install.json" ]; then
+  CONFIG="$HOME/ecc-install.json"
+else
+  CONFIG=""
+fi
 
 # ─── Phase 0: 前置检查 ──────────────────────────
 step "Phase 0: 前置检查"

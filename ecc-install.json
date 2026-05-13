@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "target": "claude",
+  "profile": "full",
+  "exclude": [
+    "capability:supply-chain",
+    "capability:documents",
+    "capability:machine-learning",
+    "capability:media",
+    "capability:social",
+    "capability:content",
+    "capability:operators",
+    "capability:orchestration",
+    "lang:swift"
+  ]
+}

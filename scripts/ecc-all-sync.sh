@@ -165,6 +165,14 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
         fi
       done
     fi
+    # delete specific rule files
+    EXCLUDE_RULES_FILES=$(jq -r '.options.exclude_rules_files // [] | .[]' "$CONFIG" 2>/dev/null || true)
+    if [ -n "$EXCLUDE_RULES_FILES" ]; then
+      echo "$EXCLUDE_RULES_FILES" | while read -r rf; do
+        target="$HOME/.claude/rules/ecc/$rf"
+        [ -f "$target" ] && run rm -f "$target" && yellow "   rm rules/ecc/$rf"
+      done
+    fi
   fi
   # skills: 顶层 skill 与 ecc/ 重复
   for d in "$HOME/.claude/skills"/*/; do

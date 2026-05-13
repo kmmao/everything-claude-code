@@ -4,7 +4,6 @@
   "profile": "full",
   "exclude": [
     "capability:supply-chain",
-    "capability:documents",
     "capability:machine-learning",
     "capability:media",
     "capability:social",
@@ -14,6 +13,7 @@
     "lang:swift"
   ],
   "options": {
-    "keep_rules": ["common", "typescript", "web", "python"]
+    "keep_rules": ["common", "typescript", "web", "python", "java"],
+    "exclude_rules_files": ["web/hooks.md"]
   }
 }

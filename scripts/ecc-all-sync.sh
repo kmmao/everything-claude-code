@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # ecc-all-sync.sh — 统一同步脚本：Claude Code + Codex CLI
 #
+# 全部由 install.sh 管理（不依赖 plugin），包括 rules、skills、agents、hooks、commands。
+#
 # 用法:
 #   bash scripts/ecc-all-sync.sh              # 日常同步（两者都更新）
-#   bash scripts/ecc-all-sync.sh --full       # 完全重装 Claude Code plugin + 重新同步 Codex
+#   bash scripts/ecc-all-sync.sh --full       # 完全重装（清除旧目录后重装）
 #   bash scripts/ecc-all-sync.sh --claude     # 只同步 Claude Code
 #   bash scripts/ecc-all-sync.sh --codex      # 只同步 Codex CLI
 #   bash scripts/ecc-all-sync.sh --dry-run    # 预览模式（不实际执行）
 #
-# 取代: ecc-sync.sh 和 ecc-reinstall.sh
+# 配置: ~/ecc-install.json（控制安装哪些模块）
 
 set -euo pipefail
 
@@ -25,7 +27,7 @@ for arg in "$@"; do
     --full)     FULL=true ;;
     --dry-run)  DRY_RUN=true ;;
     -h|--help)
-      sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
   esac
 done
@@ -52,10 +54,6 @@ run() {
   fi
 }
 
-MARKETPLACE_NAME="everything-claude-code"
-MARKETPLACE_REPO="kmmao/everything-claude-code"
-MARKETPLACE_DIR="$HOME/.claude/plugins/marketplaces/${MARKETPLACE_NAME}"
-PLUGIN_COPY="$MARKETPLACE_DIR/.claude-plugin/plugin.json"
 CONFIG="$HOME/ecc-install.json"
 
 # ─── Phase 0: 前置检查 ──────────────────────────
@@ -102,44 +100,19 @@ run git merge upstream/main || {
 run npm install --silent
 green "✓ Git 同步完成"
 
-# ─── Phase 2: Claude Code 同步 ───────────────────
+# ─── Phase 2: Claude Code 同步（全由 install.sh 管理）───
 if $MODE_CLAUDE && $HAS_CLAUDE; then
   step "Phase 2: Claude Code 同步$(${FULL} && echo ' (完全重装)' || echo '')"
 
   if $FULL; then
-    yellow "==> 卸载旧 plugin"
-    installed=$(claude plugin list 2>/dev/null | grep "@${MARKETPLACE_NAME}$" | awk '{print $2}')
-    if [ -n "$installed" ]; then
-      for pid in $installed; do
-        run claude plugin uninstall "$pid" || red "⚠️  卸 $pid 失败但继续"
-      done
-    fi
-    [ -d "$MARKETPLACE_DIR" ] && run rm -rf "$MARKETPLACE_DIR"
-
     yellow "==> 清理旧安装目录（确保无残留）"
     for d in "$HOME/.claude/rules/ecc" "$HOME/.claude/skills/ecc" "$HOME/.claude/agents" "$HOME/.claude/hooks"; do
       [ -d "$d" ] && run rm -rf "$d" && yellow "   清除 $d"
     done
     [ -f "$HOME/.claude/ecc/install-state.json" ] && run rm -f "$HOME/.claude/ecc/install-state.json"
-
-    yellow "==> 刷新 marketplace"
-    current_repo=$(claude plugin marketplace list --json 2>/dev/null \
-      | jq -r --arg n "$MARKETPLACE_NAME" '.[] | select(.name==$n) | .repo // ""')
-    if [ -z "$current_repo" ]; then
-      run claude plugin marketplace add "$MARKETPLACE_REPO"
-    elif [ "$current_repo" != "$MARKETPLACE_REPO" ]; then
-      run claude plugin marketplace remove "$MARKETPLACE_NAME"
-      run claude plugin marketplace add "$MARKETPLACE_REPO"
-    else
-      run claude plugin marketplace update "$MARKETPLACE_NAME"
-    fi
-
-    yellow "==> 安装 plugin"
-    plugin_name=$(jq -r '.plugins[0].name' "$MARKETPLACE_DIR/.claude-plugin/marketplace.json" 2>/dev/null || echo "ecc")
-    run claude plugin install "${plugin_name}@${MARKETPLACE_NAME}"
-    sleep 2
   fi
 
+  # 主安装：install.sh 装 rules + skills + agents + hooks + commands
   yellow "==> install.sh"
   if [ -f "$CONFIG" ]; then
     yellow "    配置: $CONFIG"
@@ -149,32 +122,35 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
     run ./install.sh --profile full
   fi
 
-  yellow "==> 清理重复内容（install.sh 装到 ecc/ 子目录 + plugin 已包含完整内容）"
+  # 补装 manifest 遗漏的 skills（仓库 skills/ 有但 module 未收录的）
+  yellow "==> 补装 manifest 未收录的 skills"
+  INSTALLED_SKILLS_DIR="$HOME/.claude/skills/ecc"
+  REPO_SKILLS_DIR="$REPO/skills"
+  extra_count=0
+  if [ -d "$REPO_SKILLS_DIR" ] && [ -d "$INSTALLED_SKILLS_DIR" ]; then
+    for skill_dir in "$REPO_SKILLS_DIR"/*/; do
+      skill_name=$(basename "$skill_dir")
+      if [ ! -d "$INSTALLED_SKILLS_DIR/$skill_name" ] && [ -f "$skill_dir/SKILL.md" ]; then
+        run cp -r "$skill_dir" "$INSTALLED_SKILLS_DIR/$skill_name"
+        extra_count=$((extra_count + 1))
+      fi
+    done
+    [ $extra_count -gt 0 ] && yellow "   补装了 $extra_count 个遗漏 skill" || yellow "   无遗漏（全部已安装）"
+  fi
+
+  # 清理旧遗留
+  yellow "==> 清理旧遗留"
   # rules: 顶层语言目录与 ecc/ 重复
   for d in common typescript web python golang swift kotlin java rust perl php cpp csharp dart angular arkts fsharp; do
     [ -d "$HOME/.claude/rules/$d" ] && [ -d "$HOME/.claude/rules/ecc/$d" ] && run rm -rf "$HOME/.claude/rules/$d" && yellow "   清除重复 rules/$d"
   done
   run rm -rf "$HOME/.claude/rules/zh" "$HOME/.claude/rules/ecc/zh"
-  # skills: 顶层 skill 与 ecc/ 或 plugin 重复
-  PLUGIN_SKILLS="$MARKETPLACE_DIR/skills"
+  # skills: 顶层 skill 与 ecc/ 重复
   for d in "$HOME/.claude/skills"/*/; do
     name=$(basename "$d")
     [ "$name" = "ecc" ] || [ "$name" = "learned" ] && continue
-    if [ -d "$HOME/.claude/skills/ecc/$name" ] || [ -d "$PLUGIN_SKILLS/$name" ]; then
+    if [ -d "$HOME/.claude/skills/ecc/$name" ]; then
       run rm -rf "$d" && yellow "   清除重复 skills/$name"
-    fi
-  done
-  # agents: install.sh 副本与 plugin 完全一致
-  if [ -d "$MARKETPLACE_DIR/agents" ] && [ -d "$HOME/.claude/agents" ]; then
-    run rm -rf "$HOME/.claude/agents"
-    yellow "   清除重复 agents/（plugin 已包含）"
-  fi
-
-  # 同步 plugin.json 到所有 marketplace 副本
-  for target in "$PLUGIN_COPY" $(find "$HOME/.claude/plugins/cache/everything-claude-code" -name "plugin.json" -path "*/.claude-plugin/*" 2>/dev/null); do
-    if [ -f "$target" ] && ! diff -q .claude-plugin/plugin.json "$target" >/dev/null 2>&1; then
-      yellow "==> 同步 plugin.json → $target"
-      run cp .claude-plugin/plugin.json "$target"
     fi
   done
 
@@ -197,12 +173,12 @@ if $MODE_CODEX && $HAS_CODEX; then
 
   yellow "==> 清理 Codex 冗余"
   CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-  # ~/.codex/skills/ 与 ~/.agents/skills/ 重复（Codex 实际读 ~/.agents/skills/）
+  # ~/.codex/skills/ 与 ~/.agents/skills/ 重复
   if [ -d "$CODEX_HOME/skills" ] && [ -d "${AGENTS_HOME:-$HOME/.agents}/skills" ]; then
     run rm -rf "$CODEX_HOME/skills"
     yellow "   清除 ~/.codex/skills/（Codex 用 ~/.agents/skills/）"
   fi
-  # 清理备份和副本残留
+  # 清理备份残留
   for f in "$CODEX_HOME"/config.toml.bak-* "$CODEX_HOME"/config_副本.toml "$CODEX_HOME"/auth_副本.json "$CODEX_HOME"/.codex-global-state.json.bak; do
     [ -f "$f" ] && run rm -f "$f" && yellow "   清除 $(basename "$f")"
   done
@@ -225,14 +201,11 @@ step "Phase 4: 最终验证"
 
 echo
 if $HAS_CLAUDE && $MODE_CLAUDE; then
-  echo "  Claude Code:"
-  for d in rules agents hooks skills; do
-    c=$(find "$HOME/.claude/$d" -maxdepth 1 -mindepth 1 2>/dev/null | wc -l | tr -d ' ')
+  echo "  Claude Code（install.sh 管理）:"
+  for d in rules skills agents hooks; do
+    c=$(find "$HOME/.claude/$d" -maxdepth 2 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
     printf "    ~/.claude/%-10s %s items\n" "$d/" "$c"
   done
-  [ -f "$PLUGIN_COPY" ] && printf "    plugin: v%s, %s skills\n" \
-    "$(jq -r '.version // "?"' "$PLUGIN_COPY")" \
-    "$(jq -r '(.skills // []) | length' "$PLUGIN_COPY")"
 fi
 
 if $HAS_CODEX && $MODE_CODEX; then
@@ -245,10 +218,9 @@ fi
 
 echo
 green "════════════════════════════════════════"
-green " ✓ 同步完成"
+green " ✓ 同步完成（全部由 install.sh 管理，无 plugin 依赖）"
 green "════════════════════════════════════════"
 $MODE_CLAUDE && $HAS_CLAUDE && {
   echo
-  red "⚠️  需要重启 Claude Code（plugin 清单只在启动时加载）"
-  yellow "   ⌘Q 退出 Claude Code → 重开"
+  red "⚠️  需要重启 Claude Code（⌘Q → 重开）"
 }

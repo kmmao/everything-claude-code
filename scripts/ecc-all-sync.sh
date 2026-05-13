@@ -230,6 +230,16 @@ if $MODE_CLAUDE && $HAS_CLAUDE; then
     fi
   fi
 
+  # sync global MCP config
+  GLOBAL_MCP="$HOME/.claude/.mcp.json"
+  REPO_MCP="$REPO/configs/global-mcp.json"
+  if [ -f "$REPO_MCP" ]; then
+    if [ ! -f "$GLOBAL_MCP" ] || ! diff -q "$REPO_MCP" "$GLOBAL_MCP" >/dev/null 2>&1; then
+      run cp "$REPO_MCP" "$GLOBAL_MCP"
+      yellow "==> 同步全局 MCP 配置 → ~/.claude/.mcp.json"
+    fi
+  fi
+
   green "✓ Claude Code 同步完成"
 fi
 
